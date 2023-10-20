@@ -304,7 +304,7 @@ simulate_scenario3 <- function(set_seed = TRUE,
   X_cov <- kronecker(Phi_mat2, Phi_mat1)
   
   # specify beta (mean for each exposure main effects)
-  # and theta (actual main effects)
+  # and alpha (actual main effects)
   alpha <- rep(0, p*TT)
   beta1 <- rep(0, p)
   nonzero_beta1 <- sample(1:p, nonzero_main, replace=FALSE)
@@ -342,7 +342,7 @@ simulate_scenario3 <- function(set_seed = TRUE,
     }
   }
   
-  # make Omega symmetric for easier interpretability
+  # make Gamma symmetric for easier interpretability
   Gamma <- (t(Gamma) + Gamma) / 2
   
   ################################## Simulate Data ############################
