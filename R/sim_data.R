@@ -370,12 +370,3 @@ simulate_scenario3 <- function(set_seed = TRUE,
   return(output)
 }
 
-
-
-
-
-
-
-
-
-
