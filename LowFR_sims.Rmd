@@ -17,7 +17,7 @@ source.all(path="R")
 data1 <- simulate_scenario1()
 
 # fit the LowFR model
-m1 <- fit_LowFR(data1$y_obs, data1$X_obs, output="all", burnin=100, samples=100)
+m1 <- fit_LowFR(data1$y_obs, data1$X_obs, output="all")
 ```
 
 ```{r}
@@ -25,5 +25,19 @@ m1 <- fit_LowFR(data1$y_obs, data1$X_obs, output="all", burnin=100, samples=100)
 m1_accuracy <- summarize_accuracy_LowFR(data1, m1)
 
 # summarize mixing diagnostics for main and interaction samples
-m1_diagnostics <- summarize_mixing_LowFR(m1, num_samples=100, num_chains=4)
+m1_diagnostics <- summarize_mixing_LowFR(m1)
 ```
+
+
+```{r}
+# loop over data-generation random seeds to run full simulations
+seed_list <- 1:50
+scenario <- 1
+for (i in seedlist) {
+  full_sim_save <- run_sim_LowFR(scenario=scenario,
+              save_output=TRUE,
+              path=paste0("simulations/LowFR/scenario", scenario, "/"),
+              datagen_seed=i)
+}
+```
+

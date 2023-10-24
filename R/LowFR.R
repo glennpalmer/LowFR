@@ -3,7 +3,8 @@
 
 library(tidyverse)
 library(rstan)
-source("helper.R")
+source("R/helper.R")
+source("R/sim_data.R")
 
 ###############################################################################
 ############# Fit a Stan model and return specified output ####################
@@ -388,4 +389,102 @@ summarize_mixing_LowFR <- function(fit, num_samples=1000, num_chains=4) {
   output <- c(ESS, Rhat)
   return(output)
 }
+
+
+###############################################################################
+########################### Run a full LowFR simulation #######################
+###############################################################################
+run_sim_LowFR <- function(scenario,
+                          save_output=FALSE,
+                          path="",
+                          datagen_seed=1234,
+                          stan_seed=1234,
+                          n_obs=200,
+                          p=10,
+                          k=5,
+                          k_model=NULL,
+                          TT=3,
+                          parameter_output="all",
+                          burnin=1000,
+                          samples=1000,
+                          chains=4,
+                          simulation_output=c("post_samples",
+                                              "accuracy_summary",
+                                              "diagnostic_summary")) {
+  
+  # simulate data using given simulation
+  if (scenario == 1) {
+    data <- simulate_scenario1(random_seed=datagen_seed,
+                               n_obs=n_obs,
+                               p=p,
+                               k=k,
+                               TT=TT)
+  }
+  else if (scenario == 2) {
+    data <- simulate_scenario2(random_seed=datagen_seed,
+                               n_obs=n_obs,
+                               p=p,
+                               k=k,
+                               TT=TT)
+  }
+  else if (scenario == 3) {
+    data <- simulate_scenario3(random_seed=datagen_seed,
+                               n_obs=n_obs,
+                               p=p,
+                               TT=TT)
+  }
+  else {
+    print("'scenario' must be set to one of 1, 2, or 3 in run_sim_LowFR function")
+    return(NULL)
+  }
+  
+  # fit LowFR model to data
+  post_samples <- fit_LowFR(y_obs=data$y_obs,
+                   X_obs=data$X_obs,
+                   p=p,
+                   k=k_model,
+                   TT=TT,
+                   output=parameter_output,
+                   burnin=burnin,
+                   samples=samples,
+                   chains=chains,
+                   random_seed=stan_seed)
+  
+  # summarize accuracy
+  accuracy_summary <- summarize_accuracy_LowFR(data=data,
+                                               fit=post_samples)
+  
+  # summarize sampling diagnostics
+  diagnostic_summary <- summarize_mixing_LowFR(fit=post_samples,
+                                        num_samples=samples,
+                                        num_chains=chains)
+  
+  # combine output
+  result <- list()
+  result_names <- c()
+  if ("post_samples" %in% simulation_output) {
+    result <- c(result, list(post_samples))
+    result_names <- c(result_names, "post_samples")
+  }
+  if ("accuracy_summary" %in% simulation_output) {
+    result <- c(result, list(accuracy_summary))
+    result_names <- c(result_names, "accuracy_summary")
+  }
+  if ("diagnostic_summary" %in% simulation_output) {
+    result <- c(result, list(diagnostic_summary))
+    result_names <- c(result_names, "diagnostic_summary")
+  }
+  names(result) <- result_names
+  
+  # save to given filepath if specified
+  if (save_output == TRUE) {
+    file_name <- paste0(path, "LowFR_scenario", scenario, "_seed", datagen_seed, ".rds")
+    saveRDS(result, file=file_name)
+  }
+  
+  # return output
+  return(result)
+}
+
+
 

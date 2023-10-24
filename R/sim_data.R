@@ -262,12 +262,10 @@ simulate_scenario3 <- function(set_seed = TRUE,
                                random_seed=1234,
                                n_obs=200,
                                p=10,
-                               k=5,
                                TT=3, 
                                phi1=0.7,
                                phi2=0.7,
                                sigma2=1,
-                               Sigma_diag=rep(0.25,p),
                                mu=0,
                                nonzero_main=4,
                                nonzero_int=10) {
@@ -278,7 +276,7 @@ simulate_scenario3 <- function(set_seed = TRUE,
   }
   
   # create Sigma matrix from vector input
-  Sigma = diag(Sigma_diag)
+  #Sigma = diag(Sigma_diag)
   
   # specify covariance for exposures over time
   Phi_mat1 <- matrix(data = rep(1, TT*TT), nrow=TT)
