@@ -17,7 +17,13 @@ source.all(path="R")
 data1 <- simulate_scenario1()
 
 # fit the LowFR model
-m1 <- fit_LowFR(data1$y_obs, data1$X_obs, output="all", burnin=10, samples=10)
+m1 <- fit_LowFR(data1$y_obs, data1$X_obs, output="all", burnin=100, samples=100)
+```
 
+```{r}
+# summarize accuracy of fitted model estimates of main and interaction coefficients
+m1_accuracy <- summarize_accuracy_LowFR(data1, m1)
 
+# summarize mixing diagnostics for main and interaction samples
+m1_diagnostics <- summarize_mixing_LowFR(m1, num_samples=100, num_chains=4)
 ```
