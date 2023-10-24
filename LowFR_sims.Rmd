@@ -1,0 +1,23 @@
+---
+title: "Run LowFR Simulations"
+output: pdf_document
+date: "2023-10-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(miceadds)
+source.all(path="R")
+```
+
+## Scenario 1
+
+```{r}
+# simulate data (default dimensions set in simulate_scenario fucntions)
+data1 <- simulate_scenario1()
+
+# fit the LowFR model
+m1 <- fit_LowFR(data1$y_obs, data1$X_obs, output="all", burnin=10, samples=10)
+
+
+```
