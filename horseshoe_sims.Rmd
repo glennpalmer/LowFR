@@ -1,0 +1,40 @@
+---
+title: "Run Horseshoe Simulations"
+output: pdf_document
+date: "2023-10-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(miceadds)
+source.all(path="R")
+```
+
+## Scenario 1
+
+```{r}
+# simulate data (default dimensions set in simulate_scenario functions)
+data1 <- simulate_scenario1()
+
+# fit the horseshoe model
+hs_m1 <- fit_horseshoe(data1$y_obs, data1$X_obs)
+```
+```{r}
+# summarize model accuracy
+hs_acc <- summarize_accuracy_horseshoe(data1, hs_m1)
+
+# summarize ESS
+hs_diagnostics <- summarize_mixing_horseshoe(hs_m1)
+```
+
+```{r}
+# run full simulation
+seed_list <- c(1)
+scenario <- 3
+for (i in seed_list) {
+  full_sim_save <- run_sim_horseshoe(scenario=scenario,
+              save_output=TRUE,
+              path=paste0("simulations/horseshoe/scenario", scenario, "/"),
+              datagen_seed=i)
+}
+```

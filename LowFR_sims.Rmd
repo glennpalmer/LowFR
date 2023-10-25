@@ -33,7 +33,7 @@ m1_diagnostics <- summarize_mixing_LowFR(m1)
 # loop over data-generation random seeds to run full simulations
 seed_list <- 1:50
 scenario <- 1
-for (i in seedlist) {
+for (i in seed_list) {
   full_sim_save <- run_sim_LowFR(scenario=scenario,
               save_output=TRUE,
               path=paste0("simulations/LowFR/scenario", scenario, "/"),
