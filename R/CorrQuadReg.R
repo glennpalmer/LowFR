@@ -1,121 +1,62 @@
-# Functions to fit and summarize BKMR models
+# Functions to fit and summarize CorrQuadReg models as described in "Low-Rank
+# Longitudinal Factor Regression" paper
 
 library(tidyverse)
-library(bkmr)
+library(rstan)
 source("R/helper.R")
 source("R/sim_data.R")
 
 ###############################################################################
-########################## Fit and return model ###############################
+############# Fit a Stan model and return specified output ####################
 ###############################################################################
-fit_BKMR <- function(y_obs, X_obs,
-                          samples=8000,
-                          random_seed=1234) {
+fit_CorrQuadReg <- function(y_obs, X_obs, p=10, TT=3,
+                      burnin=1000, samples=1000, chains=4,
+                      random_seed=1234) {
   
-  # set random seed for reproducibility
-  set.seed(random_seed)
+  # detect n_obs
+  n_obs <- length(y_obs)
+  
+  # compile stan model
+  m <- stan_model("Stan/CorrQuadReg.stan")
   
   # fit model
-  fit <- kmbayes(y=y_obs, Z=X_obs, iter=samples, varsel=TRUE)
+  options(mc.cores = parallel::detectCores())
+  fit <- sampling(m,
+                  list(N=n_obs,
+                       p=p,
+                       TT=TT,
+                       X=X_obs,
+                       y=y_obs),
+                  chains=chains,
+                  iter=burnin+samples,
+                  warmup=burnin,
+                  seed=random_seed)
   
-  # return fit
-  return(fit)
+  # otherwise, extract posterior samples and return list of specified parameters
+  post_samples <- extract(fit)
+  results <- list(post_samples$alpha_0,
+                  post_samples$alpha,
+                  post_samples$Gamma,
+                  post_samples$sigma2,
+                  post_samples$phi2_alpha,
+                  post_samples$phi2_gamma,
+                  post_samples$psi_alpha,
+                  post_samples$psi_gamma)
+  names(results) <- c("alpha_0",
+                    "alpha",
+                    "Gamma",
+                    "sigma2",
+                    "phi2_alpha",
+                    "phi2_gamma",
+                    "psi_alpha",
+                    "psi_gamma")
+  return(results)
 }
-
-###############################################################################
-###### Fit and return model -- grouped variable selection by exposure #########
-###############################################################################
-fit_BKMR_group <- function(y_obs, X_obs, p=10, TT=3,
-                     samples=8000,
-                     random_seed=1234) {
-  
-  # set random seed for reproducibility
-  set.seed(random_seed)
-  
-  # specify groups
-  groups <- rep(1:p, each=TT)
-  
-  # fit model
-  fit <- kmbayes(y=y_obs, Z=X_obs, iter=samples, varsel=TRUE, groups=groups)
-  
-  # return fit
-  return(fit)
-}
-
-###############################################################################
-################ Summarize "main" and "interaction" effects ###################
-###############################################################################
-get_coefficients_BKMR <- function(fit) {
-  
-  # calculate data dimensions
-  n_obs <- nrow(fit$Z)
-  pT <- ncol(fit$Z)
-  n_samples <- nrow(fit$beta)
-  
-  ########################## Main Effects ###########################
-  
-  # one more try at doing the whole thing at once
-  Z_C <- matrix(nrow=(pT*(pT+1)/2), ncol=pT)
-  Z_D <- matrix(nrow=(pT*(pT+1)/2), ncol=pT)
-  curr_index <- 1
-  same_indices <- c()
-  for (i in 1:pT) {
-    for (j in 1:i) {
-      Z_C[curr_index,] <- rep(0,pT)
-      Z_D[curr_index,] <- rep(0,pT)
-      Z_C[curr_index,i] <- 0.5
-      Z_D[curr_index,i] <- -0.5
-      if (i != j) {
-        Z_C[curr_index,j] <- 1
-        Z_D[curr_index,j] <- 1
-        same_indices <- c(same_indices, curr_index)
-      }
-      curr_index <- curr_index + 1
-    }
-  }
-  
-  # get predictions for these points -- this step is super slow...
-  start_time <- Sys.time()
-  pred_vals <- SamplePred(fit=fit, Znew=rbind(Z_C, Z_D), Xnew=cbind(0), sel=(floor(n_samples/2)+1):n_samples)
-  end_time <- Sys.time()
-  print(paste0("Took ", end_time - start_time, " hours to SamplePred for all 5000 posterior samples"))
-  
-  # initialize storage
-  alpha <- matrix(nrow=floor(n_samples/2), ncol=pT)
-  Gamma <- array(dim=c(floor(n_samples/2), pT, pT))
-  
-  # get main and interaction effects
-  curr_indexC <- 1
-  curr_indexD <- pT*(pT+1)/2 + 1
-  for (i in 1:pT) {
-    for (j in 1:i) {
-      if (i == j) {
-        alpha[,i] <- pred_vals[,curr_indexC] - pred_vals[,curr_indexD]
-        Gamma[,i,j] <- (pred_vals[,curr_indexC] + pred_vals[,curr_indexD]) * 2
-        curr_indexC <- curr_indexC + 1
-        curr_indexD <- curr_indexD + 1
-      }
-      else {
-        Gamma[,i,j] <- ((pred_vals[,curr_indexC] - pred_vals[,curr_indexD]) -
-                          (pred_vals[,same_indices[i]] - pred_vals[,(same_indices[i] + pT*(pT+1)/2)])) / 2
-        Gamma[,j,i] <- Gamma[,i,j]
-        curr_indexC <- curr_indexC + 1
-        curr_indexD <- curr_indexD + 1
-      }
-    }
-  }
-  
-  # return output 
-  output <- list(alpha, Gamma)
-  names(output) <- c("alpha", "Gamma")
-  return(output)
-}
-
 
 ###############################################################################
 ############## Calculate main and interaction MSE of a fitted model ###########
 ###############################################################################
-get_mse_BKMR <- function(data, fit) {
+get_mse_CorrQuadReg <- function(data, fit) {
   # extract main and interaction samples and true values
   alpha_samps <- fit$alpha
   Gamma_samps <- fit$Gamma
@@ -161,7 +102,7 @@ get_mse_BKMR <- function(data, fit) {
 ###############################################################################
 ############ Calculate TP and TN rates for main and interaction effects #######
 ###############################################################################
-get_TP_TN_rates_BKMR <- function(data, fit) {
+get_TP_TN_rates_CorrQuadReg <- function(data, fit) {
   # extract main and interaction samples and true values
   alpha_samps <- fit$alpha
   Gamma_samps <- fit$Gamma
@@ -233,7 +174,7 @@ get_TP_TN_rates_BKMR <- function(data, fit) {
 ###############################################################################
 ############ Calculate 95% CI coverage for main and interaction effects #######
 ###############################################################################
-get_coverage_BKMR <- function(data, fit) {
+get_coverage_CorrQuadReg <- function(data, fit) {
   # extract main and interaction samples and true values
   alpha_samps <- fit$alpha
   Gamma_samps <- fit$Gamma
@@ -279,10 +220,10 @@ get_coverage_BKMR <- function(data, fit) {
 ###############################################################################
 ######################### Summarize all accuracy results ######################
 ###############################################################################
-summarize_accuracy_BKMR <- function(data, fit) {
-  mse <- get_mse_horseshoe(data, fit)
-  coverage <- get_coverage_horseshoe(data, fit)
-  TP_TN_rate <- get_TP_TN_rates_horseshoe(data, fit)
+summarize_accuracy_CorrQuadReg <- function(data, fit) {
+  mse <- get_mse_CorrQuadReg(data, fit)
+  coverage <- get_coverage_CorrQuadReg(data, fit)
+  TP_TN_rate <- get_TP_TN_rates_CorrQuadReg(data, fit)
   output <- c(mse, coverage, TP_TN_rate)
   return(output)
 }
@@ -290,7 +231,7 @@ summarize_accuracy_BKMR <- function(data, fit) {
 ###############################################################################
 ############ Summarize main and interaction effective sample sizes ############
 ###############################################################################
-get_ESS_BKMR <- function(fit) {
+get_ESS_CorrQuadReg <- function(fit) {
   # extract main and interaction samples
   alpha_samps <- fit$alpha
   Gamma_samps <- fit$Gamma
@@ -319,32 +260,66 @@ get_ESS_BKMR <- function(fit) {
 }
 
 ###############################################################################
+######## Summarize main and interaction Gelman-Rubin diagnostic (Rhat) ########
+###############################################################################
+get_Rhat_CorrQuadReg <- function(fit, num_samples=1000, num_chains=4) {
+  # extract main and interaction samples
+  alpha_samps <- fit$alpha
+  Gamma_samps <- fit$Gamma
+  
+  # create vector and matrix to store ESS values
+  pT <- length(alpha_samps[1,])
+  main_Rhat <- rep(NA, pT)
+  int_Rhat <- matrix(data=rep(NA, pT*pT), nrow=pT)
+  
+  # populate with ESS values
+  for (i in 1:pT) {
+    main_Rhat[i] <- get_Rhat(alpha_samps[,i], num_samples=num_samples, num_chains=num_chains)
+    for (j in 1:pT) {
+      int_Rhat[i,j] <- get_Rhat(Gamma_samps[,i,j], num_samples=num_samples, num_chains=num_chains)
+    }
+  }
+  
+  # calculate min values
+  main_Rhat_max <- max(main_Rhat)
+  int_Rhat_max <- max(int_Rhat)
+  
+  # return output
+  output <- list(main_Rhat, int_Rhat, main_Rhat_max, int_Rhat_max)
+  names(output) <- c("main_Rhat", "int_Rhat", "main_Rhat_max", "int_Rhat_max")
+  return(output)
+}
+
+###############################################################################
 ########################### Summarize mixing diagnostics ######################
 ###############################################################################
-summarize_mixing_BKMR <- function(fit) {
-  ESS <- get_ESS_horseshoe(fit)
-  output <- c(ESS)
+summarize_mixing_CorrQuadReg <- function(fit, num_samples=1000, num_chains=4) {
+  ESS <- get_ESS_LowFR(fit)
+  Rhat <- get_Rhat_LowFR(fit, num_samples, num_chains)
+  output <- c(ESS, Rhat)
   return(output)
 }
 
 
 ###############################################################################
-########################### Run a full BKMR simulation #######################
+########################### Run a full LowFR simulation #######################
 ###############################################################################
-run_sim_BKMR <- function(scenario,
-                              n_obs=200,
-                              p=10,
-                              k=5,
-                              TT=3,
-                              save_output=FALSE,
-                              path="",
-                              datagen_seed=1234,
-                              model_seed=1234,
-                              samples=8000,
-                              verbose=TRUE,
-                              simulation_output=c("post_samples",
-                                                  "accuracy_summary",
-                                                  "diagnostic_summary")) {
+run_sim_CorrQuadReg <- function(scenario,
+                          save_output=FALSE,
+                          path="",
+                          datagen_seed=1234,
+                          stan_seed=1234,
+                          n_obs=200,
+                          p=10,
+                          k=5,
+                          k_model=NULL,
+                          TT=3,
+                          burnin=1000,
+                          samples=1000,
+                          chains=4,
+                          simulation_output=c("post_samples",
+                                              "accuracy_summary",
+                                              "diagnostic_summary")) {
   
   # simulate data using given simulation
   if (scenario == 1) {
@@ -368,25 +343,28 @@ run_sim_BKMR <- function(scenario,
                                TT=TT)
   }
   else {
-    print("'scenario' must be set to one of 1, 2, or 3 in run_sim_BKMR function")
+    print("'scenario' must be set to one of 1, 2, or 3 in run_sim_CorrQuadReg function")
     return(NULL)
   }
   
-  # fit BKMR model
-  fit <- fit_BKMR(y_obs=data$y_obs,
-                  X_obs=data$X_obs,
-                       samples=samples,
-                       random_seed=model_seed)
-  
-  # extract posterior samples
-  post_samples <- get_coefficients_BKMR(fit=fit)
+  # fit LowFR model to data
+  post_samples <- fit_CorrQuadReg(y_obs=data$y_obs,
+                            X_obs=data$X_obs,
+                            p=p,
+                            TT=TT,
+                            burnin=burnin,
+                            samples=samples,
+                            chains=chains,
+                            random_seed=stan_seed)
   
   # summarize accuracy
-  accuracy_summary <- summarize_accuracy_horseshoe(data=data,
-                                                   fit=post_samples)
+  accuracy_summary <- summarize_accuracy_CorrQuadReg(data=data,
+                                               fit=post_samples)
   
   # summarize sampling diagnostics
-  diagnostic_summary <- summarize_mixing_horseshoe(fit=post_samples)
+  diagnostic_summary <- summarize_mixing_CorrQuadReg(fit=post_samples,
+                                               num_samples=samples,
+                                               num_chains=chains)
   
   # combine output
   result <- list()
@@ -407,7 +385,7 @@ run_sim_BKMR <- function(scenario,
   
   # save to given filepath if specified
   if (save_output == TRUE) {
-    file_name <- paste0(path, "BKMR_scenario", scenario, "_seed", datagen_seed, ".rds")
+    file_name <- paste0(path, "CorrQuadReg_scenario", scenario, "_seed", datagen_seed, ".rds")
     saveRDS(result, file=file_name)
   }
   
@@ -415,91 +393,5 @@ run_sim_BKMR <- function(scenario,
   return(result)
 }
 
-###############################################################################
-######################## Run a full BKMR_group simulation #####################
-###############################################################################
-run_sim_BKMR_group <- function(scenario,
-                         n_obs=200,
-                         p=10,
-                         k=5,
-                         TT=3,
-                         save_output=FALSE,
-                         path="",
-                         datagen_seed=1234,
-                         model_seed=1234,
-                         samples=8000,
-                         verbose=TRUE,
-                         simulation_output=c("post_samples",
-                                             "accuracy_summary",
-                                             "diagnostic_summary")) {
-  
-  # simulate data using given simulation
-  if (scenario == 1) {
-    data <- simulate_scenario1(random_seed=datagen_seed,
-                               n_obs=n_obs,
-                               p=p,
-                               k=k,
-                               TT=TT)
-  }
-  else if (scenario == 2) {
-    data <- simulate_scenario2(random_seed=datagen_seed,
-                               n_obs=n_obs,
-                               p=p,
-                               k=k,
-                               TT=TT)
-  }
-  else if (scenario == 3) {
-    data <- simulate_scenario3(random_seed=datagen_seed,
-                               n_obs=n_obs,
-                               p=p,
-                               TT=TT)
-  }
-  else {
-    print("'scenario' must be set to one of 1, 2, or 3 in run_sim_BKMR function")
-    return(NULL)
-  }
-  
-  # fit BKMR model
-  fit <- fit_BKMR_group(y_obs=data$y_obs,
-                  X_obs=data$X_obs,
-                  p=p,
-                  TT=TT,
-                  samples=samples,
-                  random_seed=model_seed)
-  
-  # extract posterior samples
-  post_samples <- get_coefficients_BKMR(fit=fit)
-  
-  # summarize accuracy
-  accuracy_summary <- summarize_accuracy_horseshoe(data=data,
-                                                   fit=post_samples)
-  
-  # summarize sampling diagnostics
-  diagnostic_summary <- summarize_mixing_horseshoe(fit=post_samples)
-  
-  # combine output
-  result <- list()
-  result_names <- c()
-  if ("post_samples" %in% simulation_output) {
-    result <- c(result, list(post_samples))
-    result_names <- c(result_names, "post_samples")
-  }
-  if ("accuracy_summary" %in% simulation_output) {
-    result <- c(result, list(accuracy_summary))
-    result_names <- c(result_names, "accuracy_summary")
-  }
-  if ("diagnostic_summary" %in% simulation_output) {
-    result <- c(result, list(diagnostic_summary))
-    result_names <- c(result_names, "diagnostic_summary")
-  }
-  names(result) <- result_names
-  
-  # save to given filepath if specified
-  if (save_output == TRUE) {
-    file_name <- paste0(path, "BKMR_group_scenario", scenario, "_seed", datagen_seed, ".rds")
-    saveRDS(result, file=file_name)
-  }
-  
-  # return output
-  return(result)
-}
+
+
