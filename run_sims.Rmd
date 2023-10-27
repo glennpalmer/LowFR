@@ -19,7 +19,7 @@ source("R/infinitefactor/R/interactionDL.R")
 
 ```{r}
 scenario <- 1
-seedlist <- c(1234)
+seed_list <- c(1234)
 start_time <- Sys.time()
 print(paste0("Simulations started at ", start_time, "."))
 for (i in seed_list) {
@@ -69,7 +69,7 @@ print("Time elapsed: ", end_time - start_time, ".")
 
 ```{r}
 scenario <- 2
-seedlist <- c(1234)
+seed_list <- c(1234)
 start_time <- Sys.time()
 print(paste0("Simulations started at ", start_time, "."))
 for (i in seed_list) {
@@ -119,7 +119,7 @@ print("Time elapsed: ", end_time - start_time, ".")
 
 ```{r}
 scenario <- 3
-seedlist <- c(1234)
+seed_list <- c(1234)
 start_time <- Sys.time()
 print(paste0("Simulations started at ", start_time, "."))
 for (i in seed_list) {
