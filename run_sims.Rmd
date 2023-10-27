@@ -10,6 +10,7 @@ library(miceadds)
 library(infinitefactor)
 library(bkmr)
 library(horseshoe)
+library(rstan)
 source.all(path="R")
 source("R/infinitefactor/R/interactionDL.R")
 ```
