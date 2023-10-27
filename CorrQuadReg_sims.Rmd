@@ -1,0 +1,35 @@
+---
+title: "CorrQuadReg sims"
+output: pdf_document
+date: "2023-10-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(miceadds)
+source.all(path="R")
+```
+
+## First, just try compiling and running the stan file
+
+```{r}
+# simulate data (default dimensions set in simulate_scenario functions)
+data1 <- simulate_scenario1()
+```
+
+```{r}
+# call stan file
+m <- stan_model("Stan/CorrQuadReg.stan")
+  
+# fit model
+options(mc.cores = parallel::detectCores())
+fit <- sampling(m,
+                  list(N=200,
+                       p=10,
+                       TT=3,
+                       X=data1$X_obs,
+                       y=data1$y_obs))#,
+                #init_r=0.01
+                #init="0")
+```
+

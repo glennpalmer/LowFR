@@ -40,7 +40,7 @@ for (i in seed_list) {
               path=paste0("simulations/BKMR/scenario", scenario, "/"),
               datagen_seed=i)
   
-  bkmr_group_sim_save <- run_sim_BKMR(scenario=scenario,
+  bkmr_group_sim_save <- run_sim_BKMR_group(scenario=scenario,
               save_output=TRUE,
               path=paste0("simulations/BKMR_group/scenario", scenario, "/"),
               datagen_seed=i)
