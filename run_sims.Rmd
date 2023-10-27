@@ -19,6 +19,8 @@ source("R/infinitefactor/R/interactionDL.R")
 ```{r}
 scenario <- 1
 seedlist <- c(1234)
+start_time <- Sys.time()
+print(paste0("Simulations started at ", start_time, "."))
 for (i in seed_list) {
   hs_sim_s1 <- run_sim_horseshoe(scenario=scenario,
               save_output=TRUE,
@@ -51,6 +53,9 @@ for (i in seed_list) {
               datagen_seed=i)
   
 }
+end_time <- Sys.time()
+print(paste0("Simulations started at ", start_time, " and finished at ", end_time, "."))
+print("Time elapsed: ", end_time - start_time, ".")
 ```
 
 ## Scenario 2
@@ -58,6 +63,8 @@ for (i in seed_list) {
 ```{r}
 scenario <- 2
 seedlist <- c(1234)
+start_time <- Sys.time()
+print(paste0("Simulations started at ", start_time, "."))
 for (i in seed_list) {
   hs_sim_s2 <- run_sim_horseshoe(scenario=scenario,
               save_output=TRUE,
@@ -90,6 +97,9 @@ for (i in seed_list) {
               datagen_seed=i)
   
 }
+end_time <- Sys.time()
+print(paste0("Simulations started at ", start_time, " and finished at ", end_time, "."))
+print("Time elapsed: ", end_time - start_time, ".")
 ```
 
 ## Scenario 3
@@ -97,6 +107,8 @@ for (i in seed_list) {
 ```{r}
 scenario <- 3
 seedlist <- c(1234)
+start_time <- Sys.time()
+print(paste0("Simulations started at ", start_time, "."))
 for (i in seed_list) {
   hs_sim_s3 <- run_sim_horseshoe(scenario=scenario,
               save_output=TRUE,
@@ -129,4 +141,7 @@ for (i in seed_list) {
               datagen_seed=i)
   
 }
+end_time <- Sys.time()
+print(paste0("Simulations started at ", start_time, " and finished at ", end_time, "."))
+print("Time elapsed: ", end_time - start_time, ".")
 ```
