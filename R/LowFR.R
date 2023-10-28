@@ -60,7 +60,7 @@ fit_LowFR <- function(y_obs, X_obs, p=10, k=NULL, TT=3,
   }
   
   # otherwise, extract posterior samples and return list of specified parameters
-  post_samples <- extract(fit)
+  post_samples <- rstan::extract(fit)
   results <- list()
   result_names <- c()
   if ("alpha_0" %in% output | output == "all") {
