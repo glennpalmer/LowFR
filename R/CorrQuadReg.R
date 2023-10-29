@@ -33,7 +33,7 @@ fit_CorrQuadReg <- function(y_obs, X_obs, p=10, TT=3,
                   seed=random_seed)
   
   # otherwise, extract posterior samples and return list of specified parameters
-  post_samples <- extract(fit)
+  post_samples <- rstan::extract(fit)
   results <- list(post_samples$alpha_0,
                   post_samples$alpha,
                   post_samples$Gamma,
