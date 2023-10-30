@@ -62,7 +62,7 @@ for (i in seed_list) {
 }
 end_time <- Sys.time()
 print(paste0("Scenario ", scenario, " simulations started at ", start_time, " and finished at ", end_time, "."))
-print("Time elapsed: ", end_time - start_time, ".")
+print(paste0("Time elapsed: ", end_time - start_time, "."))
 ```
 
 ## Scenario 2
@@ -112,7 +112,7 @@ for (i in seed_list) {
 }
 end_time <- Sys.time()
 print(paste0("Scenario ", scenario, " simulations started at ", start_time, " and finished at ", end_time, "."))
-print("Time elapsed: ", end_time - start_time, ".")
+print(paste0("Time elapsed: ", end_time - start_time, "."))
 ```
 
 ## Scenario 3
@@ -162,5 +162,5 @@ for (i in seed_list) {
 }
 end_time <- Sys.time()
 print(paste0("Scenario ", scenario, " simulations started at ", start_time, " and finished at ", end_time, "."))
-print("Time elapsed: ", end_time - start_time, ".")
+print(paste0("Time elapsed: ", end_time - start_time, "."))
 ```
