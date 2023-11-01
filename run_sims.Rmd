@@ -164,3 +164,56 @@ end_time <- Sys.time()
 print(paste0("Scenario ", scenario, " simulations started at ", start_time, " and finished at ", end_time, "."))
 print(paste0("Time elapsed: ", end_time - start_time, "."))
 ```
+
+## All scenarios in loop
+
+```{r}
+scenario_list <- c(1,2,3)
+seed_list <- 1:100
+start_time <- Sys.time()
+for (scenario in scenario_list) {
+  print(paste0("Senario ", scenario, " seed ", i, " simulations started at ", start_time, "."))
+  for (i in seed_list) {
+    hs_sim_s3 <- run_sim_horseshoe(scenario=scenario,
+                save_output=TRUE,
+                path=paste0("simulations/horseshoe/scenario", scenario, "/"),
+                datagen_seed=i)
+    print(paste0("Horseshoe simulation finished at ", Sys.time(), "."))
+    
+    fin_sim_s3 <- run_sim_FIN(scenario=scenario,
+                save_output=TRUE,
+                path=paste0("simulations/FIN/scenario", scenario, "/"),
+                datagen_seed=i)
+    print(paste0("FIN simulation finished at ", Sys.time(), "."))
+    
+    LowFR_sim_s3 <- run_sim_LowFR(scenario=scenario,
+                save_output=TRUE,
+                path=paste0("simulations/LowFR/scenario", scenario, "/"),
+                datagen_seed=i)
+    print(paste0("LowFR simulation finished at ", Sys.time(), "."))
+    
+    bkmr_sim_s3 <- run_sim_BKMR(scenario=scenario,
+                save_output=TRUE,
+                path=paste0("simulations/BKMR/scenario", scenario, "/"),
+                datagen_seed=i)
+    print(paste0("BKMR simulation finished at ", Sys.time(), "."))
+    
+    bkmr_group_sim_s3 <- run_sim_BKMR_group(scenario=scenario,
+                save_output=TRUE,
+                path=paste0("simulations/BKMR_group/scenario", scenario, "/"),
+                datagen_seed=i)
+    print(paste0("BKMR_group simulation finished at ", Sys.time(), "."))
+    
+    cqr_sim_s3 <- run_sim_CorrQuadReg(scenario=scenario,
+                save_output=TRUE,
+                path=paste0("simulations/CorrQuadReg/scenario", scenario, "/"),
+                datagen_seed=i)
+    print(paste0("CorrQuadReg simulation finished at ", Sys.time(), "."))
+    
+  }
+  end_time <- Sys.time()
+  print(paste0("Scenario ", scenario, " seed ", i, " simulations started at ", start_time, " and finished at ", end_time, "."))
+  print(paste0("Time elapsed: ", end_time - start_time, "."))
+}
+```
+

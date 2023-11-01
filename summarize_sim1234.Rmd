@@ -14,7 +14,7 @@ source.all(path="R")
 ## Make main effect plots -- Scenario 2
 ```{r}
 model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
-scenario <- 2
+scenario <- 3
 y_lim <- c(-1.5, 2.8)
 for (model in model_list) {
   print(main_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
