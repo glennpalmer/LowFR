@@ -342,7 +342,8 @@ run_sim_BKMR <- function(scenario,
                               model_seed=1234,
                               samples=8000,
                               verbose=TRUE,
-                              simulation_output=c("post_samples",
+                              simulation_output=c("model_fit",
+                                                  "post_samples",
                                                   "accuracy_summary",
                                                   "diagnostic_summary")) {
   
@@ -391,6 +392,10 @@ run_sim_BKMR <- function(scenario,
   # combine output
   result <- list()
   result_names <- c()
+  if ("model_fit" %in% simulation_output) {
+    result <- c(result, list(fit))
+    result_names <- c(result_names, "model_fit")
+  }
   if ("post_samples" %in% simulation_output) {
     result <- c(result, list(post_samples))
     result_names <- c(result_names, "post_samples")
@@ -429,7 +434,8 @@ run_sim_BKMR_group <- function(scenario,
                          model_seed=1234,
                          samples=8000,
                          verbose=TRUE,
-                         simulation_output=c("post_samples",
+                         simulation_output=c("model_fit",
+                                             "post_samples",
                                              "accuracy_summary",
                                              "diagnostic_summary")) {
   
@@ -480,6 +486,10 @@ run_sim_BKMR_group <- function(scenario,
   # combine output
   result <- list()
   result_names <- c()
+  if ("model_fit" %in% simulation_output) {
+    result <- c(result, list(fit))
+    result_names <- c(result_names, "model_fit")
+  }
   if ("post_samples" %in% simulation_output) {
     result <- c(result, list(post_samples))
     result_names <- c(result_names, "post_samples")
