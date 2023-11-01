@@ -1,0 +1,32 @@
+---
+title: "Summarize simulations for random_seed=1234"
+output: pdf_document
+date: "2023-10-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(miceadds)
+library(tidyverse)
+source.all(path="R")
+```
+
+## Make main effect plots -- Scenario 2
+```{r}
+model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
+scenario <- 2
+y_lim <- c(-1.5, 2.8)
+for (model in model_list) {
+  print(main_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
+}
+```
+
+## Selected trace plots -- Scenario 3
+
+```{r}
+print(main_effect_traceplot(model="LowFR", scenario=3, Exp=10, t=3, y_lim=c(-0.1,1.6)))
+print(main_effect_traceplot(model="BKMR", scenario=3, Exp=10, t=3, y_lim=c(-0.1,1.6)))
+print(main_effect_traceplot(model="horseshoe", scenario=3, Exp=10, t=3, y_lim=c(-0.1,1.6)))
+```
+
+
