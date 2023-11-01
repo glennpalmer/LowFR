@@ -169,11 +169,11 @@ print(paste0("Time elapsed: ", end_time - start_time, "."))
 
 ```{r}
 scenario_list <- c(1,2,3)
-seed_list <- 1:100
-start_time <- Sys.time()
+seed_list <- 1:7
 for (scenario in scenario_list) {
-  print(paste0("Senario ", scenario, " seed ", i, " simulations started at ", start_time, "."))
   for (i in seed_list) {
+    start_time <- Sys.time()
+    print(paste0("Senario ", scenario, " seed ", i, " simulations started at ", start_time, "."))
     hs_sim_s3 <- run_sim_horseshoe(scenario=scenario,
                 save_output=TRUE,
                 path=paste0("simulations/horseshoe/scenario", scenario, "/"),
@@ -210,10 +210,10 @@ for (scenario in scenario_list) {
                 datagen_seed=i)
     print(paste0("CorrQuadReg simulation finished at ", Sys.time(), "."))
     
+    end_time <- Sys.time()
+    print(paste0("Scenario ", scenario, " seed ", i, " simulations started at ", start_time, " and finished at ", end_time, "."))
+    print(paste0("Time elapsed: ", end_time - start_time, "."))
   }
-  end_time <- Sys.time()
-  print(paste0("Scenario ", scenario, " seed ", i, " simulations started at ", start_time, " and finished at ", end_time, "."))
-  print(paste0("Time elapsed: ", end_time - start_time, "."))
 }
 ```
 
