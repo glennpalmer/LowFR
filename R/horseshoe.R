@@ -337,7 +337,7 @@ run_sim_horseshoe <- function(scenario,
   # summarize cumulative effects
   cumulative_effect_summary <- get_cumulative_accuracy(data=data,
                                                        post_samples=post_samples,
-                                                       model="horseshoe")
+                                                       model="Horseshoe")
   
   # summarize sampling diagnostics
   diagnostic_summary <- summarize_mixing_horseshoe(fit=post_samples)
