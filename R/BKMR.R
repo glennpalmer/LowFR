@@ -158,7 +158,7 @@ get_coefficients_BKMR <- function(fit) {
     }
   }
   end_time <- Sys.time()
-  print(paste0("Took ", end_time - start_time, " hours to SamplePred for all 5000 posterior samples"))
+  print(paste0("Took ", end_time - start_time, " minutes to SamplePred for all 5000 posterior samples"))
   
   # return output 
   output <- list(alpha, Gamma)
