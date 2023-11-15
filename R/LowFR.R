@@ -53,7 +53,7 @@ fit_LowFR <- function(y_obs, X_obs, p=10, k=NULL, TT=3,
                   iter=burnin+samples,
                   warmup=burnin,
                   seed=random_seed,
-                  init_r=0)
+                  init=0)
   
   # return the stan fit if specified as output
   if (output == "stan_fit") {
