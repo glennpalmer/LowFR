@@ -344,6 +344,11 @@ run_sim_FIN <- function(scenario,
   accuracy_summary <- summarize_accuracy_FIN(data=data,
                                                fit=post_samples)
   
+  # summarize cumulative effects
+  cumulative_effect_summary <- get_cumulative_accuracy(data=data,
+                                                       post_samples=post_samples,
+                                                       model="FIN")
+  
   # summarize sampling diagnostics
   diagnostic_summary <- summarize_mixing_FIN(fit=post_samples)
   
@@ -355,8 +360,8 @@ run_sim_FIN <- function(scenario,
     result_names <- c(result_names, "post_samples")
   }
   if ("accuracy_summary" %in% simulation_output) {
-    result <- c(result, list(accuracy_summary))
-    result_names <- c(result_names, "accuracy_summary")
+    result <- c(result, list(accuracy_summary, cumulative_effect_summary))
+    result_names <- c(result_names, "accuracy_summary", "cumulative_effect_summary")
   }
   if ("diagnostic_summary" %in% simulation_output) {
     result <- c(result, list(diagnostic_summary))
