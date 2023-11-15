@@ -45,7 +45,7 @@ fit_BKMR_group <- function(y_obs, X_obs, p=10, TT=3,
 ###############################################################################
 ################ Summarize "main" and "interaction" effects ###################
 ###############################################################################
-get_coefficients_BKMR <- function(fit) {
+get_coefficients_BKMR_old <- function(fit) {
   
   # calculate data dimensions
   n_obs <- nrow(fit$Z)
@@ -104,6 +104,59 @@ get_coefficients_BKMR <- function(fit) {
       }
     }
   }
+  
+  # return output 
+  output <- list(alpha, Gamma)
+  names(output) <- c("alpha", "Gamma")
+  return(output)
+}
+
+
+###############################################################################
+################ Summarize "main" and "interaction" effects ###################
+###############################################################################
+get_coefficients_BKMR <- function(fit) {
+  
+  # calculate data dimensions
+  n_obs <- nrow(fit$Z)
+  pT <- ncol(fit$Z)
+  n_samples <- nrow(fit$beta)
+  
+  # initialize storage
+  alpha <- matrix(nrow=floor(n_samples/2), ncol=pT)
+  Gamma <- array(dim=c(floor(n_samples/2), pT, pT))
+  
+  ########################## Main and Interaction Effects #####################
+  
+  start_time <- Sys.time()
+  # loop over main effects and interactions and compute them one at a time
+  for (i in 1:pT) {
+    for (j in 1:i) {
+      Z_curr <- matrix(rep(0, 4*pT), nrow=4, ncol=pT)
+      Z_curr[1,i] <- 0.5
+      Z_curr[2,i] <- -0.5
+      Z_curr[3,i] <- 0.5
+      Z_curr[4,i] <- -0.5
+      if (i != j) {
+        Z_curr[3,j] <- 1
+        Z_curr[4,j] <- 1
+      }
+      # sample at these new points
+      pred_vals <- SamplePred(fit=fit, Znew=Z_curr, Xnew=cbind(0), sel=(floor(n_samples/2)+1):n_samples)
+      
+      # record relevant main and interaction effects
+      alpha[i] <- pred_vals[,1] - pred_vals[,2]
+      if (i != j) {
+        Gamma[i,j] <- ((pred_vals[,3] - pred_vals[,4]) - alpha[i]) / 2
+        Gamma[j,i] <- Gamma[i,j]
+      }
+      else {
+        Gamma[i,j] <- (pred_vals[,1] + pred_vals[,2]) * 2
+      }
+    }
+  }
+  end_time <- Sys.time()
+  print(paste0("Took ", end_time - start_time, " hours to SamplePred for all 5000 posterior samples"))
   
   # return output 
   output <- list(alpha, Gamma)
