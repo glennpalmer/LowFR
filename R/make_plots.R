@@ -120,5 +120,77 @@ main_effect_traceplot <- function(model, scenario, Exp, t, y_lim=NULL, cex.main=
 }
 
 
+###############################################################################
+######### Plot 95% intervals and true values for cumulative effects ###########
+###############################################################################
+cum_effect_sim_plot <- function(model, scenario, y_lim=NULL) {
+  # get true values of coefficients
+  if (scenario==1) {
+    true_coefs <- simulate_scenario1(random_seed=1234)
+  }
+  else if (scenario==2) {
+    true_coefs <- simulate_scenario2(random_seed=1234)
+  }
+  else if (scenario==3) {
+    true_coefs <- simulate_scenario3(random_seed=1234)
+  }
+  else {
+    print("Must specify data generation scenario as one of 1, 2, or 3.")
+    return(NULL)
+  }
+  main_effect_true <- true_coefs$alpha
+  
+  cum_effect_true <- main_effect_true[seq(1,30,3)] +
+    main_effect_true[seq(2,30,3)] +
+    main_effect_true[seq(3,30,3)]
+  
+  # load fitted model
+  path <- paste0("simulations_1234/", model, "/scenario", scenario, "/",
+                 model, "_scenario", scenario, "_seed1234.rds")
+  data <- readRDS(path)
+  
+  # get intervals and true values
+  main_effect_samples <- data$post_samples$alpha
+  cum_effect_samples <- main_effect_samples[,seq(1,30,3)] +
+    main_effect_samples[,seq(2,30,3)] +
+    main_effect_samples[,seq(3,30,3)]
+  
+  cum_effect_lower <- c()
+  cum_effect_upper <- c()
+  for (i in 1:10) {
+    cum_effect_lower <- c(cum_effect_lower, quantile(cum_effect_samples[,i], probs=c(0.025)))
+    cum_effect_upper <- c(cum_effect_upper, quantile(cum_effect_samples[,i], probs=c(0.975)))
+  }
+  
+  # create df
+  labels <- c("x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10")
+  cum_effect_interval_df <- data.frame(labels, cum_effect_lower, cum_effect_upper, cum_effect_true)
+  cum_effect_interval_df$labels <- factor(cum_effect_interval_df$labels,
+                                           levels=rev(cum_effect_interval_df$labels))
+  
+  # capitalize "horseshoe"
+  if (model == "horseshoe") {
+    model <- "Horseshoe"
+  }
+  
+  # make plot
+  main_plot <- ggplot(data=cum_effect_interval_df, aes(x=labels, y=cum_effect_true)) +
+    geom_errorbar(aes(ymin=cum_effect_lower, ymax=cum_effect_upper)) +
+    geom_hline(yintercept=0, color="black") +
+    geom_point(color="red") +
+    coord_flip() +
+    labs(title=paste0("Cumulative effects (", model, ", Scenario ", scenario, ")"),
+         y="", x="") +
+    theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+  
+  if (!is.null(y_lim)) {
+    main_plot <- main_plot + ylim(y_lim[1], y_lim[2])
+  }
+  
+  return(main_plot)
+}
+
 
 
