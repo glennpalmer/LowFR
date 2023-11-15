@@ -14,12 +14,12 @@ source.all(path="R")
 
 ```{r}
 # simulate data (default dimensions set in simulate_scenario functions)
-data1 <- simulate_scenario1()
+data1 <- simulate_scenario1(random_seed=1)
 
 # fit the bkmr model
 bkmr_m1 <- fit_BKMR(data1$y_obs, data1$X_obs)
 bkmr_group_m1 <- fit_BKMR_group(data1$y_obs, data1$X_obs)
-bkmr_coef1 <- get_coefficients_BKMR(bkmr_m1)
+bkmr_coef1 <- get_coefficients_BKMR(bkmr_group_m1)
 ```
 
 
@@ -48,5 +48,15 @@ for (i in seed_list) {
 ```
 
 
-
+```{r}
+# run full simulation for BKMR and BKMR_group
+seed_list <- c(45)
+scenario <- 3
+for (i in seed_list) {
+  
+  bkmr_group_seed45 <- run_sim_BKMR_group(scenario=scenario,
+              save_output=FALSE,
+              datagen_seed=i)
+}
+```
 

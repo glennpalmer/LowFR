@@ -142,7 +142,7 @@ multi_sim_summary <- function(model, scenario, seed_list=c(1,5,13,17,21,24,25,33
 ### expected increase in the outcome if an exposure increases from -1 to 1   ##
 ### at all three times.                                                      ##      
 ###############################################################################
-get_cumulative_accuracy <- function(model, scenario, seed,
+get_cumulative_accuracy_postrun <- function(model, scenario, seed,
                                     path="simulations_11-6/") {
   
   # get the path for the given model results
@@ -246,7 +246,7 @@ get_cumulative_accuracy <- function(model, scenario, seed,
 ###############################################################################
 ############ Get cumulative effect samples for BKMR or BKMR_group #############
 ###############################################################################
-get_cum_samples_BKMR <- function(fit) {
+get_cum_samples_BKMR_postrun <- function(fit) {
   # generate new points to sample
   Znew <- matrix(rep(0, 300), nrow=10, ncol=30)
   for (i in 1:10) {

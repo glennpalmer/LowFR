@@ -131,6 +131,8 @@ get_coefficients_BKMR <- function(fit) {
   start_time <- Sys.time()
   # loop over main effects and interactions and compute them one at a time
   for (i in 1:pT) {
+    print(paste0("Starting for i=", i, " at:"))
+    print(Sys.time())
     for (j in 1:i) {
       Z_curr <- matrix(rep(0, 4*pT), nrow=4, ncol=pT)
       Z_curr[1,i] <- 0.5
@@ -142,16 +144,16 @@ get_coefficients_BKMR <- function(fit) {
         Z_curr[4,j] <- 1
       }
       # sample at these new points
-      pred_vals <- SamplePred(fit=fit, Znew=Z_curr, Xnew=cbind(0), sel=(floor(n_samples/2)+1):n_samples)
+      pred_vals <- SamplePred(fit=fit, Znew=Z_curr, Xnew=cbind(0))#, sel=(floor(n_samples/2)+1):n_samples)
       
       # record relevant main and interaction effects
-      alpha[i] <- pred_vals[,1] - pred_vals[,2]
+      alpha[,i] <- pred_vals[,1] - pred_vals[,2]
       if (i != j) {
-        Gamma[i,j] <- ((pred_vals[,3] - pred_vals[,4]) - alpha[i]) / 2
-        Gamma[j,i] <- Gamma[i,j]
+        Gamma[,i,j] <- ((pred_vals[,3] - pred_vals[,4]) - alpha[i]) / 2
+        Gamma[,j,i] <- Gamma[,i,j]
       }
       else {
-        Gamma[i,j] <- (pred_vals[,1] + pred_vals[,2]) * 2
+        Gamma[,i,j] <- (pred_vals[,1] + pred_vals[,2]) * 2
       }
     }
   }
@@ -329,6 +331,8 @@ get_coverage_BKMR <- function(data, fit) {
   return(output)
 }
 
+
+
 ###############################################################################
 ######################### Summarize all accuracy results ######################
 ###############################################################################
@@ -439,6 +443,12 @@ run_sim_BKMR <- function(scenario,
   accuracy_summary <- summarize_accuracy_horseshoe(data=data,
                                                    fit=post_samples)
   
+  # summarize cumulative effects
+  cumulative_effect_summary <- get_cumulative_accuracy(data=data,
+                                                       post_samples=post_samples,
+                                                       original_fit=fit,
+                                                       model="BKMR")
+  
   # summarize sampling diagnostics
   diagnostic_summary <- summarize_mixing_horseshoe(fit=post_samples)
   
@@ -454,8 +464,8 @@ run_sim_BKMR <- function(scenario,
     result_names <- c(result_names, "post_samples")
   }
   if ("accuracy_summary" %in% simulation_output) {
-    result <- c(result, list(accuracy_summary))
-    result_names <- c(result_names, "accuracy_summary")
+    result <- c(result, list(accuracy_summary, cumulative_effect_summary))
+    result_names <- c(result_names, "accuracy_summary", "cumulative_effect_summary")
   }
   if ("diagnostic_summary" %in% simulation_output) {
     result <- c(result, list(diagnostic_summary))
@@ -533,6 +543,12 @@ run_sim_BKMR_group <- function(scenario,
   accuracy_summary <- summarize_accuracy_horseshoe(data=data,
                                                    fit=post_samples)
   
+  # summarize cumulative effects
+  cumulative_effect_summary <- get_cumulative_accuracy(data=data,
+                                                       post_samples=post_samples,
+                                                       original_fit=fit,
+                                                       model="BKMR_group")
+  
   # summarize sampling diagnostics
   diagnostic_summary <- summarize_mixing_horseshoe(fit=post_samples)
   
@@ -548,8 +564,8 @@ run_sim_BKMR_group <- function(scenario,
     result_names <- c(result_names, "post_samples")
   }
   if ("accuracy_summary" %in% simulation_output) {
-    result <- c(result, list(accuracy_summary))
-    result_names <- c(result_names, "accuracy_summary")
+    result <- c(result, list(accuracy_summary, cumulative_effect_summary))
+    result_names <- c(result_names, "accuracy_summary", "cumulative_effect_summary")
   }
   if ("diagnostic_summary" %in% simulation_output) {
     result <- c(result, list(diagnostic_summary))
