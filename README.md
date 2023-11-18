@@ -22,6 +22,8 @@ where `p` is the number of exposures, `TT` is the number of measurement times, a
 
 _Note: the rows of `X` must be organized so that_ $x_i = (x_{i11}, ..., x_{i1T}, ...., x_{ip1}, ... , x_{ipT})$ _where_ $x_{ijt}$ _is the_ $j\text{th}$ _exposure at measurement time_ $t$ _for patient_ $i$.
 
+In the posterior samples saved to `fit1` in the above, the induced coefficients for $\mathbb{E}[y_i | x_i]$ are saved as `alpha_0` (intercept), `alpha` (linear terms), and `Gamma` (the symmetric interaction matrix), matching the notation from Corollary 3.2 in the paper.
+
 For a concrete example, the functions in `R/simdata.R` generate simulated data under the three scenarios described in Section 4 of the paper. For example, the following code generates data under scenario 2 and then fits a LowFR model with a small number of posterior draws.
 
 ```r
