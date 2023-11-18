@@ -32,3 +32,15 @@ fit <- fit_LowFR(y_obs=data$y_obs, X_obs=data$X_obs, p=10, TT=3, burnin=100, sam
 ```
 
 Note: if `burnin` and `samples` are not specified, they each default to 1000 (which we used for generating the results in the paper, and recommend for general use). There is also a `chains` option in `fit_LowFR` that defaults to 4. Similarly, `p`, `TT`, `n`, and a number of other data-generation settings can be modified when calling the `simulate_scenarioX` functions.
+
+# Code for results in paper
+
+The R markdown notebooks in the main directory and listed below can be used to generate the results and figures from the paper.
+
+* `intro_simulations.Rmd`: Calls simple Stan models from the `Stan` directory to generate the motivating figures in Section 1.
+* `run_sims.Rmd`: Runs the simulations in Section 4 in a loop over scenarios and random seeds. Note that this would take a long time (weeks) to run sequentially -- in practice we ran the seeds in parallel on the Duke Compute Cluster.
+* `LowFR_ELEMENT_analysis.Rmd`, `BKMR_ELEMENT_analysis.Rmd`, `CorrQuadReg.Rmd`: Generate the ELEMENT analyses in Section 5. To run these, download the ELEMENT data from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p and store in a directory called `data`. Any use of these data should cite the data set as specified in the link.
+
+
+
+
