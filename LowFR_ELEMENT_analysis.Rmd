@@ -1,0 +1,1123 @@
+---
+title: "LowFR ELEMENT analysis"
+output: html_document
+date: "2023-11-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mvtnorm)
+library(rstan)
+library(shinystan)
+library(psych)
+library(mice)
+library(ggcorrplot)
+library(cowplot)
+library(viridis)
+```
+
+## Description
+
+ELEMENT analysis using LowFR.
+
+The primary analysis begins on line 26. The posterior predictive checks and cross-validation
+begin on line 1100. The sex interaction analysis begins on line XXXX.
+
+## Primary analysis
+
+```{r}
+# import data
+data <- read_csv("data/Phthalate_Metabolites_and_Demographic_Covariates_Dataset.csv")
+
+# import followup metabolite data
+data_all_metabolites <- read_csv("data/StandardizedMetabolites572_share.csv")
+```
+
+```{r}
+# attach outcome of interest to dataset
+data$M73 <- data_all_metabolites$M73
+
+# remove patients with no observed exposure values
+data_cleaned <- data |>
+  filter(!if_all(c(10:42), ~ is.na(.)))
+
+# standardize all m73 values to state outlier value
+standardized_m73 <- (data_cleaned$M73 - mean(data_cleaned$M73)) / sd(data_cleaned$M73)
+min(standardized_m73)
+
+# remove extreme outlier
+data_cleaned <- data_cleaned |>
+  filter(M73 > -9)
+
+# restandardize outcome
+data_cleaned$M73 <- (data_cleaned$M73 - mean(data_cleaned$M73)) / sd(data_cleaned$M73)
+mean(data_cleaned$M73)
+sd(data_cleaned$M73)
+```
+
+```{r}
+# define y and X from the df
+y <- data_cleaned$M73
+X <- data_cleaned[,10:39]
+N <- nrow(X)
+p <- 10
+TT <- 3
+```
+
+```{r}
+# To impute missing values during MCMC with Stan, this chunk finds observations
+# with each missingness pattern (all of which are missing all measurements for
+# either one or two trimesters).
+
+# define indices for each trimester
+t1_ind <- seq(1,30,3)
+t2_ind <- seq(2,30,3)
+t3_ind <- seq(3,30,3)
+
+# find rows with each missingness pattern
+mis1_ind <- c()
+mis2_ind <- c()
+mis3_ind <- c()
+mis12_ind <- c()
+mis13_ind <- c()
+mis23_ind <- c()
+mis123_ind <- c()
+complete_ind <- c()
+
+for (i in 1:N) {
+  if (sum(is.na(X[i,])) == p) {
+    if (sum(is.na(X[i,t1_ind])) == p) {
+      mis1_ind <- c(mis1_ind, i)
+    }
+    else if (sum(is.na(X[i,t2_ind])) == p) {
+      mis2_ind <- c(mis2_ind, i)
+    }
+    else if (sum(is.na(X[i, t3_ind])) == p) {
+      mis3_ind <- c(mis3_ind, i)
+    }
+  }
+  else if (sum(is.na(X[i,] == 2*p))) {
+    if (sum(is.na(X[i,t1_ind])) + sum(is.na(X[i,t2_ind])) == 2*p) {
+      mis12_ind <- c(mis12_ind, i)
+    }
+    else if (sum(is.na(X[i,t1_ind])) + sum(is.na(X[i, t3_ind])) == 2*p) {
+      mis13_ind <- c(mis13_ind, i)
+    }
+    else if (sum(is.na(X[i,t2_ind])) + sum(is.na(X[i, t3_ind])) == 2*p) {
+      mis23_ind <- c(mis23_ind, i)
+    }
+  }
+  else if (sum(is.na(X[i,])) == 3*p) {
+    mis123_ind <- c(mis123_ind, i)
+  }
+  else if (sum(is.na(X[i,])) == 0) {
+    complete_ind <- c(complete_ind, i)
+  }
+}
+
+# check each index set
+mis1_ind
+mis2_ind
+mis3_ind
+mis12_ind
+mis13_ind
+mis23_ind
+mis123_ind
+complete_ind
+
+# check that sum is equal to total number of rows
+N_mis1 <- length(mis1_ind)
+N_mis2 <- length(mis2_ind)
+N_mis3 <- length(mis3_ind)
+N_mis12 <- length(mis12_ind)
+N_mis13 <- length(mis13_ind)
+N_mis23 <- length(mis23_ind)
+N_mis123 <- length(mis123_ind)
+N_complete <- length(complete_ind)
+
+N_mis1 + N_mis2 + N_mis3 + N_mis12 + N_mis13 + N_mis23 + N_mis123 + N_complete
+
+nrow(X)
+
+```
+
+```{r}
+# reshuffle X to have rows in order:
+# mis1, mis2, mis3, mis12, mis13, complete
+X_unordered <- X
+X <- rbind(X[mis1_ind,], X[mis2_ind,], X[mis3_ind,], X[mis12_ind,], X[mis13_ind,], X[complete_ind,])
+nrow(X)
+```
+
+```{r}
+# also reorder outcome y and covariates (sex, age, bmi, puberty)
+y <- c(y[mis1_ind], y[mis2_ind], y[mis3_ind], y[mis12_ind], y[mis13_ind], y[complete_ind])
+
+sex <- c(data_cleaned$SEXO_H[mis1_ind], data_cleaned$SEXO_H[mis2_ind], data_cleaned$SEXO_H[mis3_ind],
+         data_cleaned$SEXO_H[mis12_ind], data_cleaned$SEXO_H[mis13_ind], data_cleaned$SEXO_H[complete_ind])
+
+age <- c(data_cleaned$cd_age[mis1_ind], data_cleaned$cd_age[mis2_ind], data_cleaned$cd_age[mis3_ind],
+         data_cleaned$cd_age[mis12_ind], data_cleaned$cd_age[mis13_ind], data_cleaned$cd_age[complete_ind])
+
+onset <- c(data_cleaned$onset[mis1_ind], data_cleaned$onset[mis2_ind], data_cleaned$onset[mis3_ind],
+         data_cleaned$onset[mis12_ind], data_cleaned$onset[mis13_ind], data_cleaned$onset[complete_ind])
+
+bmi <- c(data_cleaned$X_ZBFA[mis1_ind], data_cleaned$X_ZBFA[mis2_ind], data_cleaned$X_ZBFA[mis3_ind],
+         data_cleaned$X_ZBFA[mis12_ind], data_cleaned$X_ZBFA[mis13_ind], data_cleaned$X_ZBFA[complete_ind])
+```
+
+```{r}
+# update missing indices accordingly
+mis1_ind <- 1:N_mis1
+mis2_ind <- 1:N_mis2 + N_mis1
+mis3_ind <- 1:N_mis3 + N_mis1 + N_mis2
+mis12_ind <- 1:N_mis12 + N_mis1 + N_mis2 + N_mis3
+mis13_ind <- 1:N_mis13 + N_mis1 + N_mis2 + N_mis3 + N_mis12
+complete_ind <- 1:N_complete + N_mis1 + N_mis2 + N_mis3 + N_mis12 + N_mis13
+```
+
+```{r}
+# standardize all columns
+colmeans_exposures <- colMeans(X, na.rm=TRUE)
+for (i in 1:ncol(X)) {
+  X[,i] <- (X[,i] - colmeans_exposures[i]) / sd(as.numeric(unlist(X[,i])), na.rm=TRUE)
+}
+```
+
+```{r}
+# create data matrix of observed x_it's to do SVD and determine number of factors
+N_obs_xit <- N_complete * 3 + N_mis1 * 2 + N_mis2 * 2 + N_mis3 * 2 + N_mis12 + N_mis13 + N_mis23
+Xit_mat <- matrix(nrow=N_obs_xit, ncol=p)
+curr_index <- 1
+
+# loop over data to populate matrix
+for (i in 1:nrow(X)) {
+  if (i %in% c(complete_ind, mis2_ind, mis3_ind, mis23_ind)) {
+    Xit_mat[curr_index,] <- unlist(X[i, seq(from=1, to=30, by=3)])
+    curr_index = curr_index + 1
+  }
+  if (i %in% c(complete_ind, mis1_ind, mis3_ind, mis13_ind)) {
+    Xit_mat[curr_index,] <- unlist(X[i, seq(from=2, to=30, by=3)])
+    curr_index = curr_index + 1
+  }
+  if (i %in% c(complete_ind, mis1_ind, mis2_ind, mis12_ind)) {
+    Xit_mat[curr_index,] <- unlist(X[i, seq(from=3, to=30, by=3)])
+    curr_index = curr_index + 1
+  }
+}
+
+curr_index
+N_obs_xit
+sum(is.na(Xit_mat))
+```
+
+```{r}
+# do SVD to get singular values
+Xit_svd <- svd(Xit_mat)
+Xit_svd$d
+```
+
+```{r}
+# determine number of factors based on rule of thumb -- looks like about 7
+for (i in 1:length(Xit_svd$d)) {
+  print(paste0("k = ", i, ":"))
+  print(sum(Xit_svd$d[1:i]) / sum(Xit_svd$d))
+}
+```
+
+```{r}
+# normalize the age and BMI columns as well
+age <- (age - mean(age)) / sd(age)
+bmi <- (bmi - mean(bmi)) / sd(bmi)
+```
+
+```{r}
+# specify values for model fitting
+y <- y
+X <- X
+p <- 10
+k <- 7
+TT <- 3
+N_total <- nrow(X)
+```
+
+```{r}
+# Calculate covariance of X_obs for reference
+covX <- cov(X, use="pairwise.complete.obs")
+corrX <- cor(X, use="pairwise.complete.obs")
+
+# Note: correlations don't seem wildly different -- maybe fix a single phi?
+print("Correlation across time for each exposure:")
+for (i in 1:10) {
+  print(paste0("exposure ", i, ":"))
+  print(corrX[(3*(i-1) + 1):(3*(i-1) + 3), (3*(i-1) + 1):(3*(i-1) + 3)])
+}
+```
+
+```{r}
+# visualize full correlation matrix of X -- cleaned/imputed data
+exposure_data_cleaned <- data_cleaned[,10:39]
+names(exposure_data_cleaned) <- c("BPA_T1", "BPA_T2", "BPA_T3",
+            "MBP_T1", "MBP_T2", "MBP_T3",
+            "MBzP_T1", "MBzP_T2", "MBzP_T3",
+            "MCPP_T1", "MCPP_T2", "MCPP_T3",
+            "MECPP_T1", "MECPP_T2", "MECPP_T3",
+            "MEHHP_T1", "MEHHP_T2", "MEHHP_T3",
+            "MEHP_T1", "MEHP_T2", "MEHP_T3",
+            "MEOHP_T1", "MEOHP_T2", "MEOHP_T3",
+            "MEP_T1", "MEP_T2", "MEP_T3",
+            "MIBP_T1", "MIBP_T2", "MIBP_T3")
+corrX_cleaned <- cor(exposure_data_cleaned, use="pairwise.complete.obs")
+corrplot_complete <- ggcorrplot(corrX_cleaned,
+           colors = c("blue", "white", "darkorange2"),
+           title="All three trimesters") + 
+  theme(axis.text.x = element_text(size = 9, angle=90),
+        axis.text.y = element_text(size = 9))
+corrplot_complete
+
+# process data to visualize each within-trimester correlation
+exposure_data_cleaned1 <- exposure_data_cleaned[,seq(1,30,3)]
+exposure_data_cleaned2 <- exposure_data_cleaned[,seq(2,30,3)]
+exposure_data_cleaned3 <- exposure_data_cleaned[,seq(3,30,3)]
+corrX_cleaned1 <- cor(exposure_data_cleaned1, use="pairwise.complete.obs")
+corrX_cleaned2 <- cor(exposure_data_cleaned2, use="pairwise.complete.obs")
+corrX_cleaned3 <- cor(exposure_data_cleaned3, use="pairwise.complete.obs")
+
+# make separate visualizations
+t1_corrplot <- ggcorrplot(corrX_cleaned1,
+           colors = c("blue", "white", "darkorange2"),
+           title="Trimester 1",
+           show.legend=FALSE) + 
+  theme(axis.text.x = element_text(size = 5, angle=90),
+        axis.text.y = element_text(size = 5))
+
+t2_corrplot <- ggcorrplot(corrX_cleaned2,
+           colors = c("blue", "white", "darkorange2"),
+           title="Trimester 2",
+           show.legend=FALSE) + 
+  theme(axis.text.x = element_text(size = 5, angle=90),
+        axis.text.y = element_text(size = 5))
+
+t3_corrplot <- ggcorrplot(corrX_cleaned3,
+           colors = c("blue", "white", "darkorange2"),
+           title="Trimester 3",
+           show.legend = FALSE) + 
+  theme(axis.text.x = element_text(size = 5, angle=90),
+        axis.text.y = element_text(size = 5))
+
+plot_grid(t1_corrplot, t2_corrplot, t3_corrplot, nrow=1)
+
+plot_grid(plot_grid(t1_corrplot, t2_corrplot, t3_corrplot, nrow=3), corrplot_complete, nrow=1,
+          rel_widths=c(1,2.5))
+```
+
+```{r}
+# replace NAs in X with -1000 so that stan accepts it
+X_replace_nas <- X
+for (i in 1:nrow(X)) {
+  for (j in 1:ncol(X)) {
+    if (is.na(X[i,j])) {
+      X_replace_nas[i,j] = 0
+    }
+  }
+}
+```
+
+```{r}
+# load model
+model_final <-
+  stan_model("stan/LowFR_ELEMENT.stan")
+```
+
+```{r}
+# fit model
+options(mc.cores = parallel::detectCores())
+fit_realdata_M73 <- sampling(model_final, list(N=N_total,
+                                               N_mis1=N_mis1,
+                                               N_mis2=N_mis2,
+                                               N_mis3=N_mis3,
+                                               N_mis12=N_mis12,
+                                               N_mis13=N_mis13,
+                                               N_complete=N_complete,
+                                               t1_ind=t1_ind,
+                                               t2_ind=t2_ind,
+                                               t3_ind=t3_ind,
+                                                                p=p,
+                                                                k=k,
+                                                                TT=TT,
+                                                                X_partial=X_replace_nas,
+                                                                y=y,
+                                                                sex=sex,
+                                                                age=age,
+                                                                bmi=bmi,
+                                                                onset=onset),
+                                      chains=4,
+                                      iter=2000,
+                                      seed=1234,
+                             init_r = 1)
+
+
+```
+
+```{r}
+# extract posterior samples
+post_samples_realdata_M73 <- extract(fit_realdata_M73)
+```
+
+```{r}
+# quantiles of covariate coefficients
+quantile(post_samples_realdata_M73$alpha_sex, probs=c(0.025, 0.5, 0.975))
+quantile(post_samples_realdata_M73$alpha_age, probs=c(0.025, 0.5, 0.975))
+quantile(post_samples_realdata_M73$alpha_bmi, probs=c(0.025, 0.5, 0.975))
+quantile(post_samples_realdata_M73$alpha_onset, probs=c(0.025, 0.5, 0.975))
+
+# means of covariate coefficients
+mean(post_samples_realdata_M73$alpha_sex)
+mean(post_samples_realdata_M73$alpha_age)
+mean(post_samples_realdata_M73$alpha_bmi)
+mean(post_samples_realdata_M73$alpha_onset)
+
+```
+
+```{r}
+####### Compute posterior of all the induced quadratic regression terms for y|x ########
+
+# initialize storage
+regression_intercept_samples <- rep(NA, length(post_samples_realdata_M73$tau[,1]))
+regression_maineffects_samples <- matrix(nrow=length(post_samples_realdata_M73$tau[,1]), ncol=p*TT)
+regression_interactions_samples <- array(dim = c(length(post_samples_realdata_M73$tau[,1]),p*TT,p*TT))
+
+# loop over posterior samples and calculate intercept, main effects, and interactions
+for (i in 1:length(post_samples_realdata_M73$tau[,1])) {
+  # extract current samples of needed posterior quantities
+  curr_Sigma <- diag(post_samples_realdata_M73$Sigma[i,])
+  curr_Phi_mat <- post_samples_realdata_M73$Phi_mat[i,,]
+  curr_Lambda <- post_samples_realdata_M73$Lambda[i,,]
+  curr_theta <- post_samples_realdata_M73$theta[i,]
+  curr_Omega <- post_samples_realdata_M73$Omega[i,,]
+  curr_mu <- post_samples_realdata_M73$mu[i]
+  
+  # reshape Omega to be symmetric
+  curr_Omega <- (t(curr_Omega) + curr_Omega) / 2
+  
+  # calculate intermediate quantities
+  V_regression_curr <- kronecker(solve(t(curr_Lambda) %*% solve(curr_Sigma) %*% curr_Lambda + diag(k)), curr_Phi_mat)
+  A_regression_curr <- V_regression_curr %*% kronecker(t(curr_Lambda) %*% solve(curr_Sigma), solve(curr_Phi_mat))
+  
+  # store coefficients
+  regression_intercept_samples[i] <- tr(curr_Omega %*% V_regression_curr) + curr_mu
+  regression_maineffects_samples[i,] <- as.vector(t(curr_theta) %*% A_regression_curr)
+  regression_interactions_samples[i,,] <- t(A_regression_curr) %*% curr_Omega %*% A_regression_curr
+}
+```
+
+```{r}
+# calculate Rhat, ess_bulk, ess_tail for regression coefficients
+
+# intercept
+intercept_mat <- matrix(nrow=1000, ncol=4)
+for (i in 1:4) {
+  intercept_mat[,i] <- regression_intercept_samples[((i-1)*1000 + 1):(i*1000)]
+}
+intercept_Rhat <- Rhat(intercept_mat)
+intercept_ess_bulk <- ess_bulk(intercept_mat)
+intercept_ess_tail <- ess_tail(intercept_mat)
+
+# main effects
+main_effect_Rhat <- rep(NA, p*TT)
+main_effect_ess_bulk <- rep(NA, p*TT)
+main_effect_ess_tail <- rep(NA, p*TT)
+curr_mat <- matrix(nrow=1000, ncol=4)
+for (j in 1:(p*TT)) {
+  for (i in 1:4) {
+    curr_mat[,i] <- regression_maineffects_samples[((i-1)*1000 + 1):(i*1000), j]
+  }
+  main_effect_Rhat[j] <- Rhat(curr_mat)
+  main_effect_ess_bulk[j] <- ess_bulk(curr_mat)
+  main_effect_ess_tail[j] <- ess_tail(curr_mat)
+}
+
+# interactions
+interaction_Rhat <- matrix(nrow=p*TT, ncol=p*TT)
+interaction_ess_bulk <- matrix(nrow=p*TT, ncol=p*TT)
+interaction_ess_tail <- matrix(nrow=p*TT, ncol=p*TT)
+for (j in 1:(p*TT)) {
+  for (k in j:(p*TT)) {
+    if (j == k) {
+      for (i in 1:4) {
+        curr_mat[,i] <- regression_interactions_samples[((i-1)*1000 + 1):(i*1000),j,k]
+      }
+    }
+    else {
+      for (i in 1:4) {
+        curr_mat[,i] <- regression_interactions_samples[((i-1)*1000 + 1):(i*1000),j,k] +
+          regression_interactions_samples[((i-1)*1000 + 1):(i*1000),k,j]
+      }
+    }
+    interaction_Rhat[j,k] <- Rhat(curr_mat)
+    interaction_ess_bulk[j,k] <- ess_bulk(curr_mat)
+    interaction_ess_tail[j,k] <- ess_tail(curr_mat)
+  }
+}
+```
+
+```{r}
+# summarize min and max values of each quantity
+
+# Rhat
+print("Rhat:")
+intercept_Rhat
+max(main_effect_Rhat)
+max(interaction_Rhat, na.rm = TRUE)
+min(main_effect_Rhat)
+min(interaction_Rhat, na.rm = TRUE)
+
+# ess_bulk
+print("ess_bulk:")
+intercept_ess_bulk
+max(main_effect_ess_bulk)
+max(interaction_ess_bulk, na.rm = TRUE)
+min(main_effect_ess_bulk)
+min(interaction_ess_bulk, na.rm = TRUE)
+
+# ess_tail
+print("ess_tail:")
+intercept_ess_tail
+max(main_effect_ess_tail)
+max(interaction_ess_tail, na.rm = TRUE)
+min(main_effect_ess_tail)
+min(interaction_ess_tail, na.rm = TRUE)
+```
+
+```{r}
+# 95% intervals and true values for main effects
+main_effect_lower <- c()
+main_effect_upper <- c()
+main_effect_mean <- c()
+
+# intercept
+main_effect_lower <- c(main_effect_lower, quantile(regression_intercept_samples, probs=c(0.025)))
+main_effect_upper <- c(main_effect_upper, quantile(regression_intercept_samples, probs=c(0.975)))
+main_effect_mean <- c(main_effect_mean, mean(regression_intercept_samples))
+
+# main effects
+for (i in 1:(p*TT)) {
+  main_effect_lower <- c(main_effect_lower, quantile(regression_maineffects_samples[,i], probs=c(0.025)))
+  main_effect_upper <- c(main_effect_upper, quantile(regression_maineffects_samples[,i], probs=c(0.975)))
+  main_effect_mean <- c(main_effect_mean, mean(regression_maineffects_samples[,i]))
+}
+```
+
+```{r}
+########## posterior interval plot for main effects ###########
+
+# create df
+labels <- c("intercept", "BPA_T1", "BPA_T2", "BPA_T3",
+            "MBP_T1", "MBP_T2", "MBP_T3",
+            "MBzP_T1", "MBzP_T2", "MBzP_T3",
+            "MCPP_T1", "MCPP_T2", "MCPP_T3",
+            "MECPP_T1", "MECPP_T2", "MECPP_T3",
+            "MEHHP_T1", "MEHHP_T2", "MEHHP_T3",
+            "MEHP_T1", "MEHP_T2", "MEHP_T3",
+            "MEOHP_T1", "MEOHP_T2", "MEOHP_T3",
+            "MEP_T1", "MEP_T2", "MEP_T3",
+            "MIBP_T1", "MIBP_T2", "MIBP_T3")
+main_effect_interval_df <- data.frame(labels[2:31], main_effect_lower[2:31], main_effect_upper[2:31], main_effect_mean[2:31])
+names(main_effect_interval_df) <- c("labels", "main_effect_lower", "main_effect_upper", "main_effect_mean")
+main_effect_interval_df$labels <- factor(main_effect_interval_df$labels,
+                                         levels=rev(main_effect_interval_df$labels))
+
+# make plot
+main_plot <- ggplot(data=main_effect_interval_df, aes(x=labels, y=main_effect_mean)) +
+  geom_errorbar(aes(ymin=main_effect_lower, ymax=main_effect_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Main effects (LowFR)",
+       y="", x="") +
+  ylim(-1,1.5) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+main_plot
+```
+
+```{r}
+# Summarize posterior for groups of metabolites of given parent compounds
+# (i.e., the expected change in 2-DG when all metabolites of each parent compound
+#  go from -1 to 1 at all three trimesters.)
+
+# BPA
+BPA_post <- (regression_maineffects_samples[,1] +
+  regression_maineffects_samples[,2] +
+  regression_maineffects_samples[,3]) * 2
+
+# DBP -- MBP, MCPP
+DBP_post <- (regression_maineffects_samples[,4] +
+  regression_maineffects_samples[,5] +
+  regression_maineffects_samples[,6] +
+  regression_maineffects_samples[,10] +
+  regression_maineffects_samples[,11] +
+  regression_maineffects_samples[,12]) * 2
+
+# DEP -- MEP
+DEP_post <- (regression_maineffects_samples[,25] +
+  regression_maineffects_samples[,26] +
+  regression_maineffects_samples[,27]) * 2
+
+# BBzP -- MBzP, MBP
+BBzP_post <- (regression_maineffects_samples[,7] +
+  regression_maineffects_samples[,8] +
+  regression_maineffects_samples[,9] +
+  regression_maineffects_samples[,4] +
+  regression_maineffects_samples[,5] +
+  regression_maineffects_samples[,6]) * 2
+
+# DEHP -- MEHP, MEOHP, MEHHP, MECPP
+DEHP_post <- (regression_maineffects_samples[,13] +
+  regression_maineffects_samples[,14] +
+  regression_maineffects_samples[,15] +
+  regression_maineffects_samples[,16] +
+  regression_maineffects_samples[,17] +
+  regression_maineffects_samples[,18] +
+  regression_maineffects_samples[,19] +
+  regression_maineffects_samples[,20] +
+  regression_maineffects_samples[,21] +
+  regression_maineffects_samples[,22] +
+  regression_maineffects_samples[,23] +
+  regression_maineffects_samples[,24]) * 2
+
+# DnOP -- MCPP
+DnOP_post <- (regression_maineffects_samples[,10] +
+  regression_maineffects_samples[,11] +
+  regression_maineffects_samples[,12]) * 2
+
+# DIBP -- MIBP
+DIBP_post <- (regression_maineffects_samples[,28] +
+  regression_maineffects_samples[,29] +
+  regression_maineffects_samples[,30]) * 2
+
+# all -- all 30 compounds
+all_post <- (regression_maineffects_samples[,1] +
+  regression_maineffects_samples[,2] +
+  regression_maineffects_samples[,3] +
+  regression_maineffects_samples[,4] +
+  regression_maineffects_samples[,5] +
+  regression_maineffects_samples[,6] +
+  regression_maineffects_samples[,7] +
+  regression_maineffects_samples[,8] +
+  regression_maineffects_samples[,9] +
+  regression_maineffects_samples[,10] +
+  regression_maineffects_samples[,11] +
+  regression_maineffects_samples[,12] +
+  regression_maineffects_samples[,13] +
+  regression_maineffects_samples[,14] +
+  regression_maineffects_samples[,15] +
+  regression_maineffects_samples[,16] +
+  regression_maineffects_samples[,17] +
+  regression_maineffects_samples[,18] +
+  regression_maineffects_samples[,19] +
+  regression_maineffects_samples[,20] +
+  regression_maineffects_samples[,21] +
+  regression_maineffects_samples[,22] +
+  regression_maineffects_samples[,23] +
+  regression_maineffects_samples[,24] +
+  regression_maineffects_samples[,25] +
+  regression_maineffects_samples[,26] +
+  regression_maineffects_samples[,27] +
+  regression_maineffects_samples[,28] +
+  regression_maineffects_samples[,29] +
+  regression_maineffects_samples[,30]) * 2
+```
+
+```{r}
+# get means and 95% intervals for parent compound effects
+parent_lower <- c(quantile(BPA_post, probs=c(0.025)),
+                  quantile(DBP_post, probs=c(0.025)),
+                  quantile(DEP_post, probs=c(0.025)),
+                  quantile(BBzP_post, probs=c(0.025)),
+                  quantile(DEHP_post, probs=c(0.025)),
+                  quantile(DnOP_post, probs=c(0.025)),
+                  quantile(DIBP_post, probs=c(0.025)),
+                  quantile(all_post, probs=c(0.025)))
+parent_upper <- c(quantile(BPA_post, probs=c(0.975)),
+                  quantile(DBP_post, probs=c(0.975)),
+                  quantile(DEP_post, probs=c(0.975)),
+                  quantile(BBzP_post, probs=c(0.975)),
+                  quantile(DEHP_post, probs=c(0.975)),
+                  quantile(DnOP_post, probs=c(0.975)),
+                  quantile(DIBP_post, probs=c(0.975)),
+                  quantile(all_post, probs=c(0.975)))
+parent_mean <- c(mean(BPA_post),
+                 mean(DBP_post),
+                 mean(DEP_post),
+                 mean(BBzP_post),
+                 mean(DEHP_post),
+                 mean(DnOP_post),
+                 mean(DIBP_post),
+                 mean(all_post))
+#parent_labels <- c("DBP (MBP, MCPP)", "DEP (MEP)", "BBzP (MBzP, MBP)",
+#                   "DEHP (MEHP, MEOHP, MEHHP, MECPP)", "DnOP (MCPP)", "DIBP (MIBP)")
+parent_labels <- c("BPA", "DBP", "DEP", "BBzP",
+                   "DEHP", "DnOP", "DIBP", "All")
+
+# make dataframe with the above
+parent_df <- data.frame(parent_labels,
+                        parent_lower,
+                        parent_upper,
+                        parent_mean)
+
+names(parent_df) <- c("labels", "parent_lower", "parent_upper", "parent_mean")
+
+# order the phthalates
+parent_df <- parent_df |>
+  mutate(labels = fct_relevel(labels, "All", "DIBP", "DnOP", "DEHP",
+                              "BBzP", "DEP", "DBP", "BPA"))
+
+# make plot
+parent_plot <- ggplot(data=parent_df, aes(x=labels, y=parent_mean)) +
+  geom_errorbar(aes(ymin=parent_lower, ymax=parent_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  #labs(title="Expected change in 2-DG when all measured metabolites of given parent \n compound go from -1 to 1 at all three trimesters",
+  labs(title="Parent compound effects (LowFR)",
+       y="", x="") +
+  ylim(-3.6,2.3) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+parent_plot
+```
+
+```{r}
+# function to evaluate change in expected y if a group of exposures are shifted from 
+# one value to another, while holding all other exposures constant at their mean values
+#
+# exposure is a vector of which exposures to shift
+# before_val is a real value for the initial value of the specified exposures
+# after_val is a real value for the new value of the specified exposures
+# returns a 3d vector with (mean_delta_y, 2.5 percentile delta_y, 97.5 percentile delta_y)
+Exp_delta_y <- function(exposure, before_val, after_val) {
+  # translate exposure into x indices
+  exposure_list <- c()
+  for (i in 1:length(exposure)) {
+    if (exposure[i] == "MEP") {
+      exposure_list <- c(exposure_list, c(25, 26, 27))
+    }
+    else if (exposure[i] == "MBP") {
+      exposure_list <- c(exposure_list, c(4, 5, 6))
+    }
+    else if (exposure[i] == "MCPP") {
+      exposure_list <- c(exposure_list, c(10, 11, 12))
+    }
+    else if (exposure[i] == "MEP_T1") {
+      exposure_list <- c(exposure_list, 25)
+    }
+    else if (exposure[i] == "MEP_T2") {
+      exposure_list <- c(exposure_list, 26)
+    }
+    else if (exposure[i] == "MEP_T3") {
+      exposure_list <- c(exposure_list, 27)
+    }
+  }
+  
+  # calculate after val samples (ignoring all other regression terms that will cancel in the difference)
+  after_samples <- rep(0, length(regression_maineffects_samples[,1]))
+  for (i in exposure_list) {
+    after_samples <- after_samples +
+      after_val * regression_maineffects_samples[,i] +
+      after_val * after_val * regression_interactions_samples[,i,i]
+    for (j in exposure_list) {
+      if (i != j) {
+        after_samples <- after_samples +
+          after_val * after_val * regression_interactions_samples[,i,j]
+      }
+    }
+  }
+  
+  # calculate before val samples (ignoring all other regression terms that will cancel in the difference)
+  before_samples <- rep(0, length(regression_maineffects_samples[,1]))
+  for (i in exposure_list) {
+    before_samples <- before_samples +
+      before_val * regression_maineffects_samples[,i] +
+      before_val * before_val * regression_interactions_samples[,i,i]
+    for (j in exposure_list) {
+      if (i != j) {
+        before_samples <- before_samples +
+          before_val * before_val * regression_interactions_samples[,i,j]
+      }
+    }
+  }
+  
+  # take difference of the after and before samples
+  diff_samples <- after_samples - before_samples
+  
+  # calculate mean, 2.5%, and 97.5% to return as a vector
+  mean_diff_y <- mean(diff_samples)
+  low_diff_y <- quantile(diff_samples, probs=c(0.025))
+  high_diff_y <- quantile(diff_samples, probs=c(0.975))
+  
+  # return result
+  result <- c(mean_diff_y, low_diff_y, high_diff_y)
+  return(result)
+}
+```
+
+```{r}
+# function to create data frame for a given list of combinations of exposures
+Exp_delta_y_df <- function(exposures_list, before_val, after_val) {
+  # initialize data frame of correct size
+  result <- data.frame(rep(0, length(exposures_list)))
+  names(result) <- c("Exposures")
+  
+  # populate exposures column
+  for (i in 1:nrow(result)) {
+    curr_name <- ""
+    for (j in 1:length(exposures_list[[i]])) {
+      curr_name <- paste(curr_name, exposures_list[[i]][j])
+    }
+    result$Exposures[i] <- curr_name
+  }
+  
+  # initialize vectors to store mean, 2.5, and 97.5 delta_y values
+  mean_delta_y <- rep(NA, nrow(result))
+  lower_delta_y <- rep(NA, nrow(result))
+  upper_delta_y <- rep(NA, nrow(result))
+  
+  # compute each value and populate the vectors
+  for (i in 1:nrow(result)) {
+    curr_vec <- Exp_delta_y(exposure = exposures_list[[i]],
+                            before_val = before_val,
+                            after_val = after_val)
+    mean_delta_y[i] <- curr_vec[1]
+    lower_delta_y[i] <- curr_vec[2]
+    upper_delta_y[i] <- curr_vec[3]
+  }
+  
+  # add the vectors to the data frame
+  result$mean_delta_y <- mean_delta_y
+  result$lower_delta_y <- lower_delta_y
+  result$upper_delta_y <- upper_delta_y
+  
+  # return the data frame
+  return(result)
+}
+
+# Example
+Exp_delta_y_df(list(c("MEP"), c("MCPP"), c("MBP"),
+                     c("MEP", "MCPP"), c("MEP", "MBP"), c("MCPP", "MBP"),
+                     c("MEP", "MCPP", "MBP")), 0, 1)
+```
+
+```{r}
+# define list of exposures to use
+exposure_list <- list(c("MBP"), c("MCPP"), c("MEP"),
+                      c("MBP", "MCPP"), c("MBP", "MEP"), c("MCPP", "MEP"),
+                      c("MEP", "MCPP", "MBP"))
+
+# make needed data frames for plots using the list and functions above
+delta_y_one_v_negativeone <- Exp_delta_y_df(exposures_list = exposure_list,
+                                     before_val = -1,
+                                     after_val = 1)
+
+# reorder df labels as needed
+delta_y_one_v_negativeone$Exposures <- factor(delta_y_one_v_negativeone$Exposures,
+                                         levels=rev(delta_y_one_v_negativeone$Exposures))
+
+# make plots
+one_v_negativeone_plot <- ggplot(data=delta_y_one_v_negativeone, aes(x=Exposures, y=mean_delta_y)) +
+  geom_errorbar(aes(ymin=lower_delta_y, ymax=upper_delta_y)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Expected change in 2-DG when given exposures increase from -1 to 1",
+       subtitle="(All other exposures held constant at their mean values)",
+       y="", x="")
+
+# show plots
+print(one_v_negativeone_plot)
+```
+
+```{r}
+# plots for MEP only
+exposure_list <- list(c("MEP_T1"), c("MEP_T2"), c("MEP_T3"),
+                      c("MEP_T1", "MEP_T2"), c("MEP_T1", "MEP_T3"), c("MEP_T2", "MEP_T3"),
+                      c("MEP_T1", "MEP_T2", "MEP_T3"))
+
+# make needed data frames for plots using the list and functions above
+delta_y_one_v_negativeone <- Exp_delta_y_df(exposures_list = exposure_list,
+                                     before_val = -1,
+                                     after_val = 1)
+
+# reorder df labels as needed
+delta_y_one_v_negativeone$Exposures <- factor(delta_y_one_v_negativeone$Exposures,
+                                         levels=rev(delta_y_one_v_negativeone$Exposures))
+
+# make plots
+one_v_negativeone_plot <- ggplot(data=delta_y_one_v_negativeone, aes(x=Exposures, y=mean_delta_y)) +
+  geom_errorbar(aes(ymin=lower_delta_y, ymax=upper_delta_y)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Expected change in 2-DG when given exposures go from -1 to 1",
+       subtitle="(All other exposures held constant at their mean values)",
+       y="", x="")
+
+# show plots
+print(one_v_negativeone_plot)
+```
+
+
+```{r}
+# helper function to calculate difference for two exposures with two particular start and end values
+spec_diff <- function(exp1, exp2, before_val1, before_val2,
+                      curr_val1, curr_val2) {
+  # calculate after val samples (ignoring all other regression terms that will cancel in the difference)
+  after_samples <- rep(0, length(regression_maineffects_samples[,1]))
+  after_samples <- after_samples +
+    curr_val1 * regression_maineffects_samples[,exp1] +
+    curr_val1 * curr_val1 * regression_interactions_samples[,exp1,exp1] +
+    curr_val2 * regression_maineffects_samples[,exp2] +
+    curr_val2 * curr_val2 * regression_interactions_samples[,exp2,exp2] +
+    curr_val1 * curr_val2 * regression_interactions_samples[,exp1,exp2] +
+    curr_val1 * curr_val2 * regression_interactions_samples[,exp2,exp1]
+  
+  # calculate before val samples (ignoring all other regression terms that will cancel in the difference)
+  before_samples <- rep(0, length(regression_maineffects_samples[,1]))
+  before_samples <- before_samples +
+    before_val1 * regression_maineffects_samples[,exp1] +
+    before_val1 * before_val1 * regression_interactions_samples[,exp1,exp1] +
+    before_val2 * regression_maineffects_samples[,exp2] +
+    before_val2 * before_val2 * regression_interactions_samples[,exp2,exp2] +
+    before_val1 * before_val2 * regression_interactions_samples[,exp1,exp2] +
+    before_val1 * before_val2 * regression_interactions_samples[,exp2,exp1]
+  
+  # calculate summaries
+  diff_vec <- after_samples - before_samples
+  mean_diff <- mean(diff_vec)
+  lower_diff <- quantile(diff_vec, probs=c(0.025))
+  upper_diff <- quantile(diff_vec, probs=c(0.975))
+  
+  # return values
+  return(c(mean_diff, lower_diff, upper_diff))
+}
+
+# function to make a 2d surface plot for two particular exposures
+make_surface_plot <- function(exposure1, exposure2, before_val1=0, before_val2=0,
+                              lower_bound1=-2, upper_bound1=2,
+                              lower_bound2=-2, upper_bound2=2,
+                              grid_size=0.1, zero_out_insignificant=FALSE) {
+  # translate exposures into x indices
+  if (exposure1 == "MEP_T1") {
+    exp1 <- 25
+  }
+  else if (exposure1 == "MEP_T2") {
+    exp1 <- 26
+  }
+  else if (exposure1 == "MEP_T3") {
+    exp1 <- 27
+  }
+  if (exposure2 == "MEP_T1") {
+    exp2 <- 25
+  }
+  else if (exposure2 == "MEP_T2") {
+    exp2 <- 26
+  }
+  else if (exposure2 == "MEP_T3") {
+    exp2 <- 27
+  }
+  
+
+  # create df with pairs of coordinates based on lower and upper bounds and grid_size
+  x1 <- seq(lower_bound1, upper_bound1, grid_size)
+  x2 <- rep(x1, each=length(x1))
+  x1 <- rep(x1, length(x1))
+  exp_grid <- data.frame(x1, x2)
+  #names(exp_grid) <- c(exposure1, exposure2)
+  
+  # initialize vectors for mean, lower bound, and upper bound
+  mean_diff <- rep(NA, length(x1))
+  lower_diff <- rep(NA, length(x1))
+  upper_diff <- rep(NA, length(x1))
+  
+  # populate mean, upper, and lower vectors
+  for (i in 1:length(mean_diff)) {
+    curr_vec <- spec_diff(exp1, exp2, before_val1, before_val2,
+                          curr_val1 = x1[i], curr_val2 = x2[i])
+    mean_diff[i] <- curr_vec[1]
+    lower_diff[i] <- curr_vec[2]
+    upper_diff[i] <- curr_vec[3]
+    
+    # zero out mean values where interval includes zero
+    if (zero_out_insignificant == TRUE) {
+      if ((lower_diff[i] < 0) & (upper_diff[i] > 0)) {
+        mean_diff[i] = 0
+      }
+    } 
+  }
+  
+  # add summaries to dataframe
+  exp_grid$mean_diff <- mean_diff
+  exp_grid$lower_diff <- lower_diff
+  exp_grid$upper_diff <- upper_diff
+  
+  # make graph
+  surf_plot <- ggplot(data=exp_grid, aes(x = x1, y = x2, z = mean_diff, fill = mean_diff)) + 
+    geom_tile() +
+    scale_fill_gradient2(low="blue", mid="white", high="red", limits=c(-0.25,0.27))
+  
+  return(surf_plot)
+}
+```
+
+```{r}
+surf_plot_MEP_T12 <- make_surface_plot("MEP_T1", "MEP_T2", zero_out_insignificant = TRUE,
+                                grid_size = 0.01)
+
+surf_plot_MEP_T12 +
+  theme_bw() +
+  labs(title="Regression surface of 2-DG for MEP at trimesters 1 and 2",
+       x="Standardized MEP level at trimester 1",
+       y="Standardized MEP level at trimester 2",
+       fill="")
+```
+
+```{r}
+# helper function to calculate difference for two trimesters of DBP with two particular start and end values
+spec_diff_DBP <- function(t1, t2, curr_val1, curr_val2) {
+  # set exp11, exp12, exp21, and exp22 based on t1 and t2
+  if (t2 <= t1) {
+    print("t1 and t2 must be in increasing order")
+  }
+  if (t1 == 1) {
+    exp11 <- 4
+    exp12 <- 10
+  }
+  else if (t1 == 2) {
+    exp11 <- 5
+    exp12 <- 11
+  }
+  if (t2 == 2) {
+    exp21 <- 5
+    exp22 <- 11
+  }
+  else if (t2 == 3) {
+    exp21 <- 6
+    exp22 <- 12
+  }
+  
+  # calculate after val samples (ignoring all other regression terms that will cancel in the difference)
+  after_samples <- rep(0, length(regression_maineffects_samples[,1]))
+  after_samples <- after_samples +
+    curr_val1 * (regression_maineffects_samples[,exp11] + regression_maineffects_samples[,exp12]) +
+    curr_val1 * curr_val1 * (regression_interactions_samples[,exp11,exp11] +
+                               regression_interactions_samples[,exp12,exp12] +
+                               2 * regression_interactions_samples[,exp11,exp12]) +
+    curr_val2 * (regression_maineffects_samples[,exp21] + regression_maineffects_samples[,exp22]) +
+    curr_val2 * curr_val2 * (regression_interactions_samples[,exp21,exp21] +
+                               regression_interactions_samples[,exp22,exp22] +
+                               2 * regression_interactions_samples[,exp21,exp22]) +
+    2 * curr_val1 * curr_val2 * (regression_interactions_samples[,exp11,exp21] +
+                                   regression_interactions_samples[,exp12,exp21] +
+                                   regression_interactions_samples[,exp11,exp22] +
+                                   regression_interactions_samples[,exp12,exp22])
+  
+  # calculate summaries
+  diff_vec <- after_samples
+  mean_diff <- mean(diff_vec)
+  lower_diff <- quantile(diff_vec, probs=c(0.025))
+  upper_diff <- quantile(diff_vec, probs=c(0.975))
+  
+  # return values
+  return(c(mean_diff, lower_diff, upper_diff))
+}
+
+# function to make a 2d surface plot for two particular exposures
+make_surface_plot_DBP <- function(t1, t2,
+                              lower_bound1=-2, upper_bound1=2,
+                              lower_bound2=-2, upper_bound2=2,
+                              grid_size=0.1, zero_out_insignificant=FALSE) {
+  
+
+  # create df with pairs of coordinates based on lower and upper bounds and grid_size
+  x1 <- seq(lower_bound1, upper_bound1, grid_size)
+  x2 <- rep(x1, each=length(x1))
+  x1 <- rep(x1, length(x1))
+  exp_grid <- data.frame(x1, x2)
+  #names(exp_grid) <- c(exposure1, exposure2)
+  
+  # initialize vectors for mean, lower bound, and upper bound
+  mean_diff <- rep(NA, length(x1))
+  lower_diff <- rep(NA, length(x1))
+  upper_diff <- rep(NA, length(x1))
+  
+  # populate mean, upper, and lower vectors
+  for (i in 1:length(mean_diff)) {
+    curr_vec <- spec_diff_DBP(t1=t1, t2=t2, curr_val1 = x1[i], curr_val2 = x2[i])
+    mean_diff[i] <- curr_vec[1]
+    lower_diff[i] <- curr_vec[2]
+    upper_diff[i] <- curr_vec[3]
+    
+    # zero out mean values where interval includes zero
+    if (zero_out_insignificant == TRUE) {
+      if ((lower_diff[i] < 0) & (upper_diff[i] > 0)) {
+        mean_diff[i] = 0
+      }
+    } 
+  }
+  
+  # add summaries to dataframe
+  exp_grid$mean_diff <- mean_diff
+  exp_grid$lower_diff <- lower_diff
+  exp_grid$upper_diff <- upper_diff
+  
+  # make graph
+  surf_plot <- ggplot(data=exp_grid, aes(x = x1, y = x2, z = mean_diff, fill = mean_diff)) + 
+    geom_tile() +
+    scale_fill_gradient2(low="blue", mid="white", high="red", limits=c(-0.25,0.27))
+  
+  return(surf_plot)
+}
+```
+
+```{r}
+surf_plot_DBP_T12 <- make_surface_plot_DBP(1, 2, zero_out_insignificant = TRUE,
+                                grid_size = 0.01)
+
+surf_plot_DBP_T12 +
+  theme_bw() +
+  labs(title="Regression surface of 2-DG for DBP metabolites at trimesters 1 and 2",
+       x="Standardized MBP and MCPP levels at trimester 1",
+       y="Standardized MBP and MCPP levels at trimester 2",
+       fill="")
+```
+
+
+# Posterior predictive checks
+
+Note: Run lines 29-325 first to import and preprocess data.
+
+```{r}
+# load model
+model_final <-
+  stan_model("stan/LowFR_ELEMENT_ppcheck.stan")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
