@@ -11,13 +11,70 @@ library(tidyverse)
 source.all(path="R")
 ```
 
-## Make main effect plots -- Scenario 2
+# Simulation visualizations
+
+This notebook makes plots for Section 4 in the paper from already-computed simulations,
+which were run with random seed 1234. Since the results needed here include
+all posterior samples, the simulations_1234 file was too large to upload to github.
+
+
+## Make main effect plots -- Scenario 1
 ```{r}
 model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
-scenario <- 3
+scenario <- 1
 y_lim <- c(-1.5, 2.8)
 for (model in model_list) {
   print(main_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
+}
+```
+
+## Make cumulative effect plots -- Scenario 1
+```{r}
+model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
+scenario <- 1
+y_lim <- c(-1, 1.2)
+for (model in model_list) {
+  print(cum_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
+}
+```
+
+## Make main effect plots -- Scenario 2
+```{r}
+model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
+scenario <- 2
+y_lim <- c(-1.5, 2.8)
+for (model in model_list) {
+  print(main_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
+}
+```
+
+## Make cumulative effect plots -- Scenario 2
+```{r}
+model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
+scenario <- 2
+y_lim <- c(-1.4, 3)
+for (model in model_list) {
+  print(cum_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
+}
+```
+
+## Make main effect plots -- Scenario 3
+```{r}
+model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
+scenario <- 3
+y_lim <- c(-1.4, 1.4)
+for (model in model_list) {
+  print(main_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
+}
+```
+
+## Make cumulative effect plots -- Scenario 3
+```{r}
+model_list <- c("LowFR", "BKMR", "BKMR_group", "FIN", "horseshoe", "CorrQuadReg")
+scenario <- 3
+y_lim <- c(-1.4, 1.4)
+for (model in model_list) {
+  print(cum_effect_sim_plot(model=model, scenario=scenario, y_lim=y_lim))
 }
 ```
 
@@ -28,5 +85,3 @@ print(main_effect_traceplot(model="LowFR", scenario=3, Exp=10, t=3, y_lim=c(-0.1
 print(main_effect_traceplot(model="BKMR", scenario=3, Exp=10, t=3, y_lim=c(-0.1,1.6)))
 print(main_effect_traceplot(model="horseshoe", scenario=3, Exp=10, t=3, y_lim=c(-0.1,1.6)))
 ```
-
-
