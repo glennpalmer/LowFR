@@ -15,7 +15,7 @@ source.all(path="R")
 
 This notebook makes plots for Section 4 in the paper from already-computed simulations,
 which were run with random seed 1234. Since the results needed here include
-all posterior samples, the simulations_1234 file was too large to upload to github.
+all posterior samples, the simulations_1234 directory was too large to upload to github.
 
 
 ## Make main effect plots -- Scenario 1
