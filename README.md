@@ -39,7 +39,7 @@ The R markdown notebooks in the main directory and listed below can be used to g
 
 * `intro_simulations.Rmd`: Calls simple Stan models from the `Stan` directory to generate the motivating figures in Section 1.
 * `run_sims.Rmd`: Runs the simulations in Section 4 in a loop over scenarios and random seeds. Note that this would take a long time (weeks) to run sequentially -- in practice we ran the seeds in parallel on the Duke Compute Cluster.
-* `LowFR_ELEMENT_analysis.Rmd`, `BKMR_ELEMENT_analysis.Rmd`, `CorrQuadReg.Rmd`: Generate the ELEMENT analyses in Section 5. To run these, download the ELEMENT data from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p and store in a directory called `data`. Any use of these data should cite the data set as specified in the link.
+* `LowFR_ELEMENT_analysis.Rmd`, `BKMR_ELEMENT_analysis.Rmd`, `CorrQuadReg_ELEMENT_analysis.Rmd`: Generate the ELEMENT analyses in Section 5. To run these, download the ELEMENT data from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p and store in a directory called `data`. Any use of these data should cite the data set as specified in the link.
 
 
 
