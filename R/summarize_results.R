@@ -46,10 +46,8 @@ single_sim_summary <- function(model, scenario, print_mixing=FALSE) {
 ###############################################################################
 ### Summarize list of simulations for a given scenario, seed_list, and model ##
 ###############################################################################
-multi_sim_summary <- function(model, scenario, seed_list=c(1,5,13,17,21,24,25,33,
-                                                           34,37,41,49,61,69,73,
-                                                           77,85,89,97,1234),
-                              path="simulations_11-6/", print_mixing=FALSE) {
+multi_sim_summary <- function(model, scenario, seed_list=1:100,
+                              path="simulations_results/", print_mixing=FALSE) {
   
   # initialize storage for all quantities of interest
   main_mse <- c()
@@ -60,6 +58,10 @@ multi_sim_summary <- function(model, scenario, seed_list=c(1,5,13,17,21,24,25,33
   main_TN_rate <- c()
   int_TP_rate <- c()
   int_TN_rate <- c()
+  CE_mse <- c()
+  CE_coverage <- c()
+  CE_TP_rate <- c()
+  CE_TN_rate <- c()
   if (print_mixing==TRUE) {
     main_ESS_mins <- c()
     int_ESS_mins <- c()
@@ -85,6 +87,10 @@ multi_sim_summary <- function(model, scenario, seed_list=c(1,5,13,17,21,24,25,33
     int_TP_rate <- c(int_TP_rate, curr_model$accuracy_summary$int_TP_rate)
     main_TN_rate <- c(main_TN_rate, curr_model$accuracy_summary$main_TN_rate)
     int_TN_rate <- c(int_TN_rate, curr_model$accuracy_summary$int_TN_rate)
+    CE_mse <- c(CE_mse, curr_model$cumulative_effect_summary$cum_mse)
+    CE_coverage <- c(CE_coverage, curr_model$cumulative_effect_summary$cum_coverage)
+    CE_TP_rate <- c(CE_TP_rate, curr_model$cumulative_effect_summary$cum_TP_rate)
+    CE_TN_rate <- c(CE_TN_rate, curr_model$cumulative_effect_summary$cum_TN_rate)
     
     # add mixing results if requested
     if (print_mixing==TRUE) {
@@ -115,6 +121,14 @@ multi_sim_summary <- function(model, scenario, seed_list=c(1,5,13,17,21,24,25,33
   print(mean(int_TP_rate))
   print("Int TN rate:")
   print(mean(int_TN_rate))
+  print("CE MSE:")
+  print(mean(CE_mse))
+  print("CE coverage:")
+  print(mean(CE_coverage))
+  print("CE TP rate:")
+  print(mean(CE_TP_rate))
+  print("CE TN rate:")
+  print(mean(CE_TN_rate))
   
   # print mixing summaries if requested
   if (print_mixing) {

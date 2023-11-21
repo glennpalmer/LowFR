@@ -15,199 +15,73 @@ source.all(path="R")
 source("R/infinitefactor/R/interactionDL.R")
 ```
 
-## Scenario 1
+
+# Section 4 simulations
+
+The first block of code below runs 100 replications of the simulations in Section 4.
+
+Then, the remaining code blocks summarize the already-completed simulations stored 
+in the simulations_results directory, which we ran in parallel on the Duke Compute
+Cluster for use in the paper. (These summaries can be run without running the
+first block.)
+
+
+
+## Run all simulations in a loop
+
+NOTE: This code chunk would take a very long time (i.e., weeks) to run sequentially.
 
 ```{r}
-scenario <- 1
-seed_list <- c(1234)
-start_time <- Sys.time()
-print(paste0("Simulations started at ", start_time, "."))
-for (i in seed_list) {
-  hs_sim_s1 <- run_sim_horseshoe(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/horseshoe/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("Horseshoe simulation finished at ", Sys.time(), "."))
-  
-  fin_sim_s1 <- run_sim_FIN(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/FIN/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("FIN simulation finished at ", Sys.time(), "."))
-  
-  LowFR_sim_s1 <- run_sim_LowFR(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/LowFR/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("LowFR simulation finished at ", Sys.time(), "."))
-  
-  bkmr_sim_s1 <- run_sim_BKMR(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/BKMR/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("BKMR simulation finished at ", Sys.time(), "."))
-  
-  bkmr_group_sim_s1 <- run_sim_BKMR_group(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/BKMR_group/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("BKMR_group simulation finished at ", Sys.time(), "."))
-  
-  cqr_sim_s1 <- run_sim_CorrQuadReg(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/CorrQuadReg/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("CorrQuadReg simulation finished at ", Sys.time(), "."))
-  
-}
-end_time <- Sys.time()
-print(paste0("Scenario ", scenario, " simulations started at ", start_time, " and finished at ", end_time, "."))
-print(paste0("Time elapsed: ", end_time - start_time, "."))
-```
-
-## Scenario 2
-
-```{r}
-scenario <- 2
-seed_list <- c(1234)
-start_time <- Sys.time()
-print(paste0("Simulations started at ", start_time, "."))
-for (i in seed_list) {
-  hs_sim_s2 <- run_sim_horseshoe(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/horseshoe/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("Horseshoe simulation finished at ", Sys.time(), "."))
-  
-  fin_sim_s2 <- run_sim_FIN(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/FIN/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("FIN simulation finished at ", Sys.time(), "."))
-  
-  LowFR_sim_s2 <- run_sim_LowFR(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/LowFR/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("LowFR simulation finished at ", Sys.time(), "."))
-  
-  bkmr_sim_s2 <- run_sim_BKMR(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/BKMR/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("BKMR simulation finished at ", Sys.time(), "."))
-  
-  bkmr_group_sim_s2 <- run_sim_BKMR_group(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/BKMR_group/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("BKMR_group simulation finished at ", Sys.time(), "."))
-  
-  cqr_sim_s2 <- run_sim_CorrQuadReg(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/CorrQuadReg/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("CorrQuadReg simulation finished at ", Sys.time(), "."))
-  
-}
-end_time <- Sys.time()
-print(paste0("Scenario ", scenario, " simulations started at ", start_time, " and finished at ", end_time, "."))
-print(paste0("Time elapsed: ", end_time - start_time, "."))
-```
-
-## Scenario 3
-
-```{r}
-scenario <- 3
-seed_list <- c(1234)
-start_time <- Sys.time()
-print(paste0("Simulations started at ", start_time, "."))
-for (i in seed_list) {
-  hs_sim_s3 <- run_sim_horseshoe(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/horseshoe/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("Horseshoe simulation finished at ", Sys.time(), "."))
-  
-  fin_sim_s3 <- run_sim_FIN(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/FIN/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("FIN simulation finished at ", Sys.time(), "."))
-  
-  LowFR_sim_s3 <- run_sim_LowFR(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/LowFR/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("LowFR simulation finished at ", Sys.time(), "."))
-  
-  bkmr_sim_s3 <- run_sim_BKMR(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/BKMR/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("BKMR simulation finished at ", Sys.time(), "."))
-  
-  bkmr_group_sim_s3 <- run_sim_BKMR_group(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/BKMR_group/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("BKMR_group simulation finished at ", Sys.time(), "."))
-  
-  cqr_sim_s3 <- run_sim_CorrQuadReg(scenario=scenario,
-              save_output=TRUE,
-              path=paste0("simulations/CorrQuadReg/scenario", scenario, "/"),
-              datagen_seed=i)
-  print(paste0("CorrQuadReg simulation finished at ", Sys.time(), "."))
-  
-}
-end_time <- Sys.time()
-print(paste0("Scenario ", scenario, " simulations started at ", start_time, " and finished at ", end_time, "."))
-print(paste0("Time elapsed: ", end_time - start_time, "."))
-```
-
-## All scenarios in loop
-
-```{r}
-scenario_list <- c(1,2,3)
-seed_list <- 1:7
+# Note: The initial run of LowFR for seed 11, scenario 3 had some convergence
+# issues, so the result in the simulations_results folder are for a second run
+# with the Stan parameter init_r set to 0.2.
+scenario_list <- 1:3
+seed_list <- 1:100
 for (scenario in scenario_list) {
   for (i in seed_list) {
     start_time <- Sys.time()
-    print(paste0("Senario ", scenario, " seed ", i, " simulations started at ", start_time, "."))
-    hs_sim_s3 <- run_sim_horseshoe(scenario=scenario,
-                save_output=TRUE,
-                path=paste0("simulations/horseshoe/scenario", scenario, "/"),
-                datagen_seed=i)
-    print(paste0("Horseshoe simulation finished at ", Sys.time(), "."))
+    print(paste0("Scenario ", scenario, " seed ", i, " simulations started at ", start_time, "."))
     
-    fin_sim_s3 <- run_sim_FIN(scenario=scenario,
+    LowFR_sim <- run_sim_LowFR(scenario=scenario,
                 save_output=TRUE,
-                path=paste0("simulations/FIN/scenario", scenario, "/"),
-                datagen_seed=i)
-    print(paste0("FIN simulation finished at ", Sys.time(), "."))
-    
-    LowFR_sim_s3 <- run_sim_LowFR(scenario=scenario,
-                save_output=TRUE,
-                path=paste0("simulations/LowFR/scenario", scenario, "/"),
-                datagen_seed=i)
+                #path=paste0("simulations/LowFR/scenario", scenario, "/"),
+                datagen_seed=i,
+                simulation_output = c("accuracy_summary", "diagnostic_summary"))
     print(paste0("LowFR simulation finished at ", Sys.time(), "."))
     
-    bkmr_sim_s3 <- run_sim_BKMR(scenario=scenario,
+    hs_sim <- run_sim_horseshoe(scenario=scenario,
                 save_output=TRUE,
-                path=paste0("simulations/BKMR/scenario", scenario, "/"),
-                datagen_seed=i)
+                #path=paste0("simulations/horseshoe/scenario", scenario, "/"),
+                datagen_seed=i,
+                simulation_output = c("accuracy_summary", "diagnostic_summary"))
+    print(paste0("Horseshoe simulation finished at ", Sys.time(), "."))
+    
+    fin_sim <- run_sim_FIN(scenario=scenario,
+                save_output=TRUE,
+                #path=paste0("simulations/FIN/scenario", scenario, "/"),
+                datagen_seed=i,
+                simulation_output = c("accuracy_summary", "diagnostic_summary"))
+    print(paste0("FIN simulation finished at ", Sys.time(), "."))
+    
+    bkmr_sim <- run_sim_BKMR(scenario=scenario,
+                save_output=TRUE,
+                #path=paste0("simulations/BKMR/scenario", scenario, "/"),
+                datagen_seed=i,
+                simulation_output = c("accuracy_summary", "diagnostic_summary"))
     print(paste0("BKMR simulation finished at ", Sys.time(), "."))
     
-    bkmr_group_sim_s3 <- run_sim_BKMR_group(scenario=scenario,
+    bkmr_group_sim <- run_sim_BKMR_group(scenario=scenario,
                 save_output=TRUE,
-                path=paste0("simulations/BKMR_group/scenario", scenario, "/"),
-                datagen_seed=i)
+                #path=paste0("simulations/BKMR_group/scenario", scenario, "/"),
+                datagen_seed=i,
+                simulation_output = c("accuracy_summary", "diagnostic_summary"))
     print(paste0("BKMR_group simulation finished at ", Sys.time(), "."))
     
-    cqr_sim_s3 <- run_sim_CorrQuadReg(scenario=scenario,
+    cqr_sim <- run_sim_CorrQuadReg(scenario=scenario,
                 save_output=TRUE,
-                path=paste0("simulations/CorrQuadReg/scenario", scenario, "/"),
-                datagen_seed=i)
+                #path=paste0("simulations/CorrQuadReg/scenario", scenario, "/"),
+                datagen_seed=i,
+                simulation_output = c("accuracy_summary", "diagnostic_summary"))
     print(paste0("CorrQuadReg simulation finished at ", Sys.time(), "."))
     
     end_time <- Sys.time()
@@ -216,4 +90,103 @@ for (scenario in scenario_list) {
   }
 }
 ```
+
+
+## Print overall summaries of saved results in simulations_results folder
+
+
+```{r}
+# LowFR scenario 1
+multi_sim_summary(model="LowFR", scenario=1, seed_list = 1:100, path="simulations_results/")
+```
+
+```{r}
+# LowFR scenario 2
+multi_sim_summary(model="LowFR", scenario=2, seed_list = 1:100, path="simulations_results/")
+```
+
+```{r}
+# LowFR scenario 3
+multi_sim_summary(model="LowFR", scenario=3, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# BKMR scenario 1
+multi_sim_summary(model="BKMR", scenario=1, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# BKMR scenario 2
+multi_sim_summary(model="BKMR", scenario=2, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# BKMR scenario 3
+multi_sim_summary(model="BKMR", scenario=3, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# BKMR_group scenario 1
+multi_sim_summary(model="BKMR_group", scenario=1, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# BKMR_group scenario 2
+multi_sim_summary(model="BKMR_group", scenario=2, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# BKMR_group scenario 3
+multi_sim_summary(model="BKMR_group", scenario=3, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# FIN scenario 1
+multi_sim_summary(model="FIN", scenario=1, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# FIN scenario 2
+multi_sim_summary(model="FIN", scenario=2, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# FIN scenario 3
+multi_sim_summary(model="FIN", scenario=3, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# Horseshoe scenario 1
+multi_sim_summary(model="Horseshoe", scenario=1, seed_list = c(1:100), path="simulations_results/")
+```
+
+
+```{r}
+# Horseshoe scenario 2
+multi_sim_summary(model="Horseshoe", scenario=2, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# Horseshoe scenario 3
+multi_sim_summary(model="Horseshoe", scenario=3, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# CorrQuadReg scenario 1
+multi_sim_summary(model="CorrQuadReg", scenario=1, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# CorrQuadReg scenario 2
+multi_sim_summary(model="CorrQuadReg", scenario=2, seed_list = c(1:100), path="simulations_results/")
+```
+
+```{r}
+# CorrQuadReg scenario 3
+multi_sim_summary(model="CorrQuadReg", scenario=3, seed_list = c(1:100), path="simulations_results/")
+```
+
+
+
+
 
