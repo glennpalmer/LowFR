@@ -22,7 +22,7 @@ The first block of code below runs 100 replications of the simulations in Sectio
 
 Then, the remaining code blocks summarize the already-completed simulations stored 
 in the simulations_results directory, which we ran in parallel on the Duke Compute
-Cluster for use in the paper. (These summaries can be run without running the
+Cluster for use in the paper. (These summary chunks can be run without running the
 first block.)
 
 
@@ -92,7 +92,7 @@ for (scenario in scenario_list) {
 ```
 
 
-## Print overall summaries of saved results in simulations_results folder
+## Print overall summaries of already-computed results in simulations_results folder
 
 
 ```{r}
