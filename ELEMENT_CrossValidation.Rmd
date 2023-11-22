@@ -24,7 +24,7 @@ library(matrixStats)
 This notebook runs 10-fold cross-validation on the ELEMENT data with each of
 LowFR, BKMR, and CorrQuadReg.
 
-LowFR begins on line 30. BKMR begins on line 203. CorrQuadReg begins on line XXXX.
+LowFR begins on line 30. BKMR begins on line 203. CorrQuadReg begins on line 361.
 
 Note -- the data imported below can be downloaded from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p. Any use of this
 data should cite the dataset as indicated in the link.
