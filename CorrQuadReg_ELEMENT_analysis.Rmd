@@ -1,0 +1,444 @@
+---
+title: "CorrQuadReg ELEMENT analysis"
+output: html_document
+date: "2023-11-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mvtnorm)
+library(rstan)
+library(shinystan)
+library(psych)
+library(mice)
+library(ggcorrplot)
+library(cowplot)
+library(viridis)
+```
+
+## Description
+
+ELEMENT analysis using CorrQuadReg
+
+The primary analysis begins on line 30. The posterior predictive checks
+begin on line 355.
+
+Note -- the data imported below can be downloaded from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p. Any use of this
+data should cite the dataset as indicated in the link.
+
+## Primary analysis
+
+```{r}
+# set random seed
+set.seed(1234)
+```
+
+```{r}
+# import data
+data <- read_csv("data/Phthalate_Metabolites_and_Demographic_Covariates_Dataset.csv")
+
+# import followup metabolite data
+data_all_metabolites <- read_csv("data/StandardizedMetabolites572_share.csv")
+```
+
+```{r}
+# attach outcome of interest to dataset
+data$M73 <- data_all_metabolites$M73
+
+# remove patients with no observed exposure values
+data_cleaned <- data |>
+  filter(!if_all(c(10:42), ~ is.na(.)))
+
+# standardize all m73 values to state outlier value
+standardized_m73 <- (data_cleaned$M73 - mean(data_cleaned$M73)) / sd(data_cleaned$M73)
+min(standardized_m73)
+
+# remove extreme outlier
+data_cleaned <- data_cleaned |>
+  filter(M73 > -9)
+```
+
+```{r}
+############ impute missing values with mice #######
+
+# run function -- use other exposure values and the child's sex
+data_cleaned_mids <- mice(data = data_cleaned[,c(3, 10:42)], m=1, print=FALSE, seed=1234)
+data_cleaned_imputed <- complete(data_cleaned_mids)
+
+# overwrite the data_cleaned columns with missingness with the imputed version
+data_cleaned[,(10:42)] <- data_cleaned_imputed[,(2:34)]
+```
+
+```{r}
+# standardize all columns
+colmeans_exposures <- colMeans(data_cleaned[,10:43])
+for (i in 10:43) {
+  data_cleaned[,i] <- (data_cleaned[,i] - colmeans_exposures[i-9]) / sd(as.numeric(unlist(data_cleaned[,i])))
+}
+```
+
+```{r}
+# normalize the age and BMI columns as well
+data_cleaned$cd_age <- (data_cleaned$cd_age - mean(data_cleaned$cd_age)) / sd(data_cleaned$cd_age)
+data_cleaned$X_ZBFA <- (data_cleaned$X_ZBFA - mean(data_cleaned$X_ZBFA)) / sd(data_cleaned$X_ZBFA)
+```
+
+```{r}
+# compute y_obs and Z_obs for model (Z_obs are exposures)
+y_obs <- data_cleaned$M73
+Z_obs <- matrix(nrow=nrow(data_cleaned), ncol=30)
+for (i in 1:nrow(data_cleaned)) {
+  Z_obs[i,] <- unlist(data_cleaned[i,10:39])
+}
+```
+
+```{r}
+# create matrix of covariates X_obs
+X_obs <- matrix(c(data_cleaned$SEXO_H,
+                  data_cleaned$cd_age,
+                  data_cleaned$X_ZBFA,
+                  data_cleaned$onset),
+                ncol=4)
+```
+
+```{r}
+# compile stan model
+mCQR <- stan_model("Stan/CorrQuadReg_AdditionalCovariates.stan")
+```
+
+```{r}
+# fit model
+options(mc.cores = parallel::detectCores())
+fitCQR <- sampling(mCQR,
+                   list(N=nrow(X_obs),
+                        p=10,
+                        TT=3,
+                        r=4,
+                        X=Z_obs,
+                        y=y_obs,
+                        Z=X_obs),
+                   seed=1234)
+```
+
+```{r}
+# extract samples
+post_samples <- rstan::extract(fitCQR)
+alpha_samples <- post_samples$alpha
+beta_samples <- post_samples$beta
+Gamma_samples <- post_samples$Gamma
+psi_alpha_samples <- post_samples$psi_alpha
+psi_gamma_samples <- post_samples$psi_gamma
+```
+
+```{r}
+mean(psi_alpha_samples)
+mean(psi_gamma_samples)
+```
+
+```{r}
+# summarize covariate intervals
+print("Sex:")
+quantile(beta_samples[,1], probs=c(0.025, 0.975))
+mean(beta_samples[,1])
+print("Age:")
+quantile(beta_samples[,2], probs=c(0.025, 0.975))
+mean(beta_samples[,2])
+print("BMI:")
+quantile(beta_samples[,3], probs=c(0.025, 0.975))
+mean(beta_samples[,3])
+print("Puberty Onset:")
+quantile(beta_samples[,4], probs=c(0.025, 0.975))
+mean(beta_samples[,4])
+```
+
+```{r}
+# organize upper/lower quantiles, means, and true values of main effects
+diffs_lower <- c()
+diffs_upper <- c()
+diffs_mean <- c()
+
+for (i in 1:30) {
+  diffs_lower <- c(diffs_lower, quantile(alpha_samples[,i], probs=0.025))
+  diffs_upper <- c(diffs_upper, quantile(alpha_samples[,i], probs=0.975))
+  diffs_mean <- c(diffs_mean, mean(alpha_samples[,i]))
+}
+```
+
+```{r}
+########## posterior interval plot for main effects ###########
+
+# create df
+labels <- c("BPA_T1", "BPA_T2", "BPA_T3",
+            "MBP_T1", "MBP_T2", "MBP_T3",
+            "MBzP_T1", "MBzP_T2", "MBzP_T3",
+            "MCPP_T1", "MCPP_T2", "MCPP_T3",
+            "MECPP_T1", "MECPP_T2", "MECPP_T3",
+            "MEHHP_T1", "MEHHP_T2", "MEHHP_T3",
+            "MEHP_T1", "MEHP_T2", "MEHP_T3",
+            "MEOHP_T1", "MEOHP_T2", "MEOHP_T3",
+            "MEP_T1", "MEP_T2", "MEP_T3",
+            "MIBP_T1", "MIBP_T2", "MIBP_T3")
+diffs_df <- data.frame(labels, diffs_lower, diffs_upper, diffs_mean)
+diffs_df$labels <- factor(diffs_df$labels,
+                                         levels=rev(diffs_df$labels))
+
+# make plot
+main_plot <- ggplot(data=diffs_df, aes(x=labels, y=diffs_mean)) +
+  geom_errorbar(aes(ymin=diffs_lower, ymax=diffs_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  #labs(title="Expected change in y when given x_ij goes from -1 to 1 (naive BKMR)",
+  #     subtitle = "All other exposures fixed to 0. Red=true. Interval=95% posterior CI.",
+  labs(title="Main effects (CorrQuadReg)",
+       y="", x="") +
+  ylim(-1,1.5) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+main_plot
+```
+
+
+```{r}
+# Summarize posterior for groups of metabolites of given parent compounds
+# (i.e., the expected change in 2-DG when all metabolites of each parent compound
+#  go from -1 to 1 at all three trimesters.)
+
+# BPA
+BPA_post <- (alpha_samples[,1] +
+  alpha_samples[,2] +
+  alpha_samples[,3]) * 2
+
+# DBP -- MBP, MCPP
+DBP_post <- (alpha_samples[,4] +
+  alpha_samples[,5] +
+  alpha_samples[,6] +
+  alpha_samples[,10] +
+  alpha_samples[,11] +
+  alpha_samples[,12]) * 2
+
+# DEP -- MEP
+DEP_post <- (alpha_samples[,25] +
+  alpha_samples[,26] +
+  alpha_samples[,27]) * 2
+
+# BBzP -- MBzP, MBP
+BBzP_post <- (alpha_samples[,7] +
+  alpha_samples[,8] +
+  alpha_samples[,9] +
+  alpha_samples[,4] +
+  alpha_samples[,5] +
+  alpha_samples[,6]) * 2
+
+# DEHP -- MEHP, MEOHP, MEHHP, MECPP
+DEHP_post <- (alpha_samples[,13] +
+  alpha_samples[,14] +
+  alpha_samples[,15] +
+  alpha_samples[,16] +
+  alpha_samples[,17] +
+  alpha_samples[,18] +
+  alpha_samples[,19] +
+  alpha_samples[,20] +
+  alpha_samples[,21] +
+  alpha_samples[,22] +
+  alpha_samples[,23] +
+  alpha_samples[,24]) * 2
+
+# DnOP -- MCPP
+DnOP_post <- (alpha_samples[,10] +
+  alpha_samples[,11] +
+  alpha_samples[,12]) * 2
+
+# DIBP -- MIBP
+DIBP_post <- (alpha_samples[,28] +
+  alpha_samples[,29] +
+  alpha_samples[,30]) * 2
+
+# all -- all 30 compounds
+all_post <- (alpha_samples[,1] +
+  alpha_samples[,2] +
+  alpha_samples[,3] +
+  alpha_samples[,4] +
+  alpha_samples[,5] +
+  alpha_samples[,6] +
+  alpha_samples[,7] +
+  alpha_samples[,8] +
+  alpha_samples[,9] +
+  alpha_samples[,10] +
+  alpha_samples[,11] +
+  alpha_samples[,12] +
+  alpha_samples[,13] +
+  alpha_samples[,14] +
+  alpha_samples[,15] +
+  alpha_samples[,16] +
+  alpha_samples[,17] +
+  alpha_samples[,18] +
+  alpha_samples[,19] +
+  alpha_samples[,20] +
+  alpha_samples[,21] +
+  alpha_samples[,22] +
+  alpha_samples[,23] +
+  alpha_samples[,24] +
+  alpha_samples[,25] +
+  alpha_samples[,26] +
+  alpha_samples[,27] +
+  alpha_samples[,28] +
+  alpha_samples[,29] +
+  alpha_samples[,30]) * 2
+
+```
+
+```{r}
+# get means and 95% intervals for parent compound effects
+parent_lower <- c(quantile(BPA_post, probs=c(0.025)),
+                  quantile(DBP_post, probs=c(0.025)),
+                  quantile(DEP_post, probs=c(0.025)),
+                  quantile(BBzP_post, probs=c(0.025)),
+                  quantile(DEHP_post, probs=c(0.025)),
+                  quantile(DnOP_post, probs=c(0.025)),
+                  quantile(DIBP_post, probs=c(0.025)),
+                  quantile(all_post, probs=c(0.025)))
+parent_upper <- c(quantile(BPA_post, probs=c(0.975)),
+                  quantile(DBP_post, probs=c(0.975)),
+                  quantile(DEP_post, probs=c(0.975)),
+                  quantile(BBzP_post, probs=c(0.975)),
+                  quantile(DEHP_post, probs=c(0.975)),
+                  quantile(DnOP_post, probs=c(0.975)),
+                  quantile(DIBP_post, probs=c(0.975)),
+                  quantile(all_post, probs=c(0.975)))
+parent_mean <- c(mean(BPA_post),
+                 mean(DBP_post),
+                 mean(DEP_post),
+                 mean(BBzP_post),
+                 mean(DEHP_post),
+                 mean(DnOP_post),
+                 mean(DIBP_post),
+                 mean(all_post))
+#parent_labels <- c("DBP (MBP, MCPP)", "DEP (MEP)", "BBzP (MBzP, MBP)",
+#                   "DEHP (MEHP, MEOHP, MEHHP, MECPP)", "DnOP (MCPP)", "DIBP (MIBP)")
+parent_labels <- c("BPA", "DBP", "DEP", "BBzP",
+                   "DEHP", "DnOP", "DIBP", "All")
+
+# make dataframe with the above
+parent_df <- data.frame(parent_labels,
+                        parent_lower,
+                        parent_upper,
+                        parent_mean)
+
+names(parent_df) <- c("labels", "parent_lower", "parent_upper", "parent_mean")
+
+# order the phthalates
+parent_df <- parent_df |>
+  mutate(labels = fct_relevel(labels, "All", "DIBP", "DnOP", "DEHP",
+                              "BBzP", "DEP", "DBP", "BPA"))
+
+# make plot
+parent_plot <- ggplot(data=parent_df, aes(x=labels, y=parent_mean)) +
+  geom_errorbar(aes(ymin=parent_lower, ymax=parent_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Parent compound effects (CorrQuadReg)",
+       y="", x="") +
+  ylim(-3.6, 2.3) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+parent_plot
+```
+
+
+# Posterior predictive checks
+
+Note: First run lines 32-103 to import and process data.
+
+```{r}
+# compile stan model
+mCQR <- stan_model("Stan/CorrQuadReg_AdditionalCovariates_ppcheck.stan")
+```
+
+```{r}
+# fit model
+options(mc.cores = parallel::detectCores())
+fitCQR <- sampling(mCQR,
+                   list(N=nrow(X_obs),
+                        p=10,
+                        TT=3,
+                        r=4,
+                        X=Z_obs,
+                        y=y_obs,
+                        Z=X_obs),
+                   seed=1234)
+```
+
+```{r}
+# extract samples
+post_samples <- rstan::extract(fitCQR)
+```
+
+```{r}
+# posterior predictive checks
+# posterior predictives stored in post_samples$y_rep
+ppc_dens_overlay(y=y_obs, yrep=post_samples$y_rep) +
+  ylim(0,1) +
+  xlim(-5.5, 5.5) +
+  labs(title="CorrQuadReg posterior predictive density of 2-DG") +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=13))
+```
+
+```{r}
+ppc_stat(y_obs, post_samples$y_rep, stat = "mean") +
+  labs(title="CorrQuadReg")
+ppc_stat(y_obs, post_samples$y_rep, stat = "sd") +
+  labs(title="CorrQuadReg")
+```
+
+```{r}
+quantile5 <- function(x) {
+  return(quantile(x, probs=c(0.05)))
+}
+
+quantile95 <- function(x) {
+  return(quantile(x, probs=c(0.95)))
+}
+
+ppc_stat(y_obs, post_samples$y_rep, stat = "median") +
+  labs(title="CorrQuadReg")
+ppc_stat(y_obs, post_samples$y_rep, stat = "quantile5") +
+  labs(title="CorrQuadReg")
+ppc_stat(y_obs, post_samples$y_rep, stat = "quantile95") +
+  labs(title="CorrQuadReg")
+```
+
+```{r}
+y_rep_means_CQR <- colMeans(post_samples$y_rep)
+y_rep_upper_CQR <- rep(NA, length(y_obs))
+y_rep_lower_CQR <- rep(NA, length(y_obs))
+for (i in 1:length(y_obs)) {
+  y_rep_lower_CQR[i] <- quantile(post_samples$y_rep[,i], probs=c(0.025))
+  y_rep_upper_CQR[i] <- quantile(post_samples$y_rep[,i], probs=c(0.975))
+}
+
+CQR_pp_df <- data.frame(y_obs, y_rep_means_CQR, y_rep_upper_CQR, y_rep_lower_CQR)
+names(CQR_pp_df) <- c("observed_y", "y_rep_mean", "upper", "lower")
+
+ggplot(data=CQR_pp_df, aes(x=observed_y, y=y_rep_mean)) +
+  geom_errorbar(aes(ymin=lower, ymax=upper)) +
+  geom_point(color="red") +
+  geom_abline(slope=1, intercept=0) +
+  ylim(-5.5,4) +
+  labs(title="CorrQuadReg -- posterior predictive 2-DG",
+       x="Observed 2-DG",
+       y="Posterior predictive 2-DG") +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=13))
+```
+
+

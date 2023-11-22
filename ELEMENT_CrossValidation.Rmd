@@ -1,0 +1,519 @@
+---
+title: "Cross-validation for ELEMENT"
+output: html_document
+date: "2023-11-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mvtnorm)
+library(rstan)
+library(shinystan)
+library(psych)
+library(mice)
+library(ggcorrplot)
+library(cowplot)
+library(viridis)
+library(bkmr)
+library(matrixStats)
+```
+
+## Description
+
+This notebook runs 10-fold cross-validation on the ELEMENT data with each of
+LowFR, BKMR, and CorrQuadReg.
+
+LowFR begins on line 30. BKMR begins on line 203. CorrQuadReg begins on line XXXX.
+
+Note -- the data imported below can be downloaded from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p. Any use of this
+data should cite the dataset as indicated in the link.
+
+# LowFR
+
+```{r}
+# set random seed
+set.seed(1234)
+```
+
+```{r}
+# import data
+data <- read_csv("data/Phthalate_Metabolites_and_Demographic_Covariates_Dataset.csv")
+
+# import followup metabolite data
+data_all_metabolites <- read_csv("data/StandardizedMetabolites572_share.csv")
+```
+
+```{r}
+# attach outcome of interest to dataset
+data$M73 <- data_all_metabolites$M73
+
+# remove patients with no observed exposure values
+data_cleaned <- data |>
+  filter(!if_all(c(10:42), ~ is.na(.)))
+
+# standardize all m73 values to state outlier value
+standardized_m73 <- (data_cleaned$M73 - mean(data_cleaned$M73)) / sd(data_cleaned$M73)
+min(standardized_m73)
+
+# remove extreme outlier
+data_cleaned <- data_cleaned |>
+  filter(M73 > -9)
+```
+
+```{r}
+############ impute missing values with mice #######
+
+# run function -- use other exposure values and the child's sex
+data_cleaned_mids <- mice(data = data_cleaned[,c(3, 10:42)], m=1, print=FALSE, seed=1234)
+data_cleaned_imputed <- complete(data_cleaned_mids)
+
+# overwrite the data_cleaned columns with missingness with the imputed version
+data_cleaned[,(10:42)] <- data_cleaned_imputed[,(2:34)]
+```
+
+```{r}
+# standardize all columns
+colmeans_exposures <- colMeans(data_cleaned[,10:43])
+for (i in 10:43) {
+  data_cleaned[,i] <- (data_cleaned[,i] - colmeans_exposures[i-9]) / sd(as.numeric(unlist(data_cleaned[,i])))
+}
+```
+
+```{r}
+# normalize the age and BMI columns as well
+data_cleaned$cd_age <- (data_cleaned$cd_age - mean(data_cleaned$cd_age)) / sd(data_cleaned$cd_age)
+data_cleaned$X_ZBFA <- (data_cleaned$X_ZBFA - mean(data_cleaned$X_ZBFA)) / sd(data_cleaned$X_ZBFA)
+```
+
+```{r}
+# compute y_obs and X_obs for model (X_obs are exposures)
+y_obs <- data_cleaned$M73
+X_obs <- matrix(nrow=nrow(data_cleaned), ncol=30)
+for (i in 1:nrow(data_cleaned)) {
+  X_obs[i,] <- unlist(data_cleaned[i,10:39])
+}
+```
+
+```{r}
+# save covariates
+sex <- data_cleaned$SEXO_H
+age <- data_cleaned$cd_age
+bmi <- data_cleaned$X_ZBFA
+onset <- data_cleaned$onset
+```
+
+```{r}
+# create CV splits
+set.seed(1234)
+shuffled_indices <- sample(1:length(y_obs), length(y_obs))
+splits <- list(1:23, 24:46, 47:69, 70:92, 93:115,
+               116:137, 138:159, 160:181, 182:203, 204:226) # all either length 22 or 23
+```
+
+```{r}
+# run fits and save models
+mse_vec <- c()
+for (i in 1:10) {
+  # run train/test model for given split
+  curr_split <- i
+  curr_train <- shuffled_indices[-splits[[curr_split]]]
+  curr_test <- shuffled_indices[splits[[curr_split]]]
+  
+  # generate training data
+  N_train <- length(curr_train)
+  X_train <- X_obs[curr_train,]
+  y_train <- y_obs[curr_train]
+  age_train <- age[curr_train]
+  sex_train <- sex[curr_train]
+  bmi_train <- bmi[curr_train]
+  onset_train <- bmi[curr_train]
+  
+  # generate test data
+  N_test <- length(curr_test)
+  X_test <- X_obs[curr_test,]
+  y_test <- y_obs[curr_test]
+  age_test <- age[curr_test]
+  sex_test <- sex[curr_test]
+  bmi_test <- bmi[curr_test]
+  onset_test <- bmi[curr_test]
+  
+  # load stan model
+  mCV_LowFR <- stan_model("Stan/LowFR_ELEMENT_CV.stan")
+  
+  # fit stan model
+  options(mc.cores = parallel::detectCores())
+  fitCV_LowFR <- sampling(mCV_LowFR,
+                     list(N_train=N_train,
+                          N_test=N_test,
+                          p=10,
+                          TT=3,
+                          k=7,
+                          X_train=X_train,
+                          y_train=y_train,
+                          age_train=age_train,
+                          sex_train=sex_train,
+                          bmi_train=bmi_train,
+                          onset_train=onset_train,
+                          X_test=X_test,
+                          y_test=y_test,
+                          age_test=age_test,
+                          sex_test=sex_test,
+                          bmi_test=bmi_test,
+                          onset_test=onset_test),
+                     seed=1234)
+  
+  # save model
+  saveRDS(fitCV_LowFR, paste0("LowFR_fitCV_split", curr_split))
+  
+  # extract samples and print mse
+  post_samples <- rstan::extract(fitCV_LowFR)
+  curr_y_pred <- colMeans(post_samples$y_test_pred)
+  pred_errors <- curr_y_pred - y_test
+  curr_mse <- mean(pred_errors^2)
+  print(paste0("MSE for LowFR split ", i, ": ", curr_mse))
+  mse_vec <- c(mse_vec, curr_mse)
+}
+print("MSE for each split for LowFR:")
+print(mse_vec)
+print("Overall MSE for LowFR:")
+print(mean(mse_vec))
+```
+
+```{r}
+y_pred_mean <- c()
+y_pred_lower <- c()
+y_pred_upper <- c()
+
+# compile all results together
+for (i in 1:10) {
+  curr_fit <- readRDS(paste0("LowFR_fitCV_split", i))
+  curr_samples <- rstan::extract(curr_fit)
+  y_pred_mean <- c(y_pred_mean, colMeans(curr_samples$y_test_pred))
+  y_pred_lower <- c(y_pred_lower, colQuantiles(curr_samples$y_test_pred, probs=c(0.025)))
+  y_pred_upper <- c(y_pred_upper, colQuantiles(curr_samples$y_test_pred, probs=c(0.975)))
+}
+```
+
+```{r}
+# summarize overall mse
+mean((y_pred_mean - y_obs[shuffled_indices])^2)
+```
+
+
+# BKMR
+
+```{r}
+# set random seed
+set.seed(1234)
+```
+
+```{r}
+# import data
+data <- read_csv("data/Phthalate_Metabolites_and_Demographic_Covariates_Dataset.csv")
+
+# import followup metabolite data
+data_all_metabolites <- read_csv("data/StandardizedMetabolites572_share.csv")
+```
+
+```{r}
+# attach outcome of interest to dataset
+data$M73 <- data_all_metabolites$M73
+
+# remove patients with no observed exposure values
+data_cleaned <- data |>
+  filter(!if_all(c(10:42), ~ is.na(.)))
+
+# standardize all m73 values to state outlier value
+standardized_m73 <- (data_cleaned$M73 - mean(data_cleaned$M73)) / sd(data_cleaned$M73)
+min(standardized_m73)
+
+# remove extreme outlier
+data_cleaned <- data_cleaned |>
+  filter(M73 > -9)
+```
+
+```{r}
+############ impute missing values with mice #######
+
+# run function -- use other exposure values and the child's sex
+data_cleaned_mids <- mice(data = data_cleaned[,c(3, 10:42)], m=1, print=FALSE, seed=1234)
+data_cleaned_imputed <- complete(data_cleaned_mids)
+
+# overwrite the data_cleaned columns with missingness with the imputed version
+data_cleaned[,(10:42)] <- data_cleaned_imputed[,(2:34)]
+```
+
+```{r}
+# standardize all columns
+colmeans_exposures <- colMeans(data_cleaned[,10:43])
+for (i in 10:43) {
+  data_cleaned[,i] <- (data_cleaned[,i] - colmeans_exposures[i-9]) / sd(as.numeric(unlist(data_cleaned[,i])))
+}
+```
+
+```{r}
+# normalize the age and BMI columns as well
+data_cleaned$cd_age <- (data_cleaned$cd_age - mean(data_cleaned$cd_age)) / sd(data_cleaned$cd_age)
+data_cleaned$X_ZBFA <- (data_cleaned$X_ZBFA - mean(data_cleaned$X_ZBFA)) / sd(data_cleaned$X_ZBFA)
+```
+
+```{r}
+# compute y_obs and Z_obs for model (Z_obs are exposures)
+y_obs <- data_cleaned$M73
+Z_obs <- matrix(nrow=nrow(data_cleaned), ncol=30)
+for (i in 1:nrow(data_cleaned)) {
+  Z_obs[i,] <- unlist(data_cleaned[i,10:39])
+}
+```
+
+```{r}
+# create matrix of covariates X_obs
+X_obs <- matrix(c(data_cleaned$SEXO_H,
+                  data_cleaned$cd_age,
+                  data_cleaned$X_ZBFA,
+                  data_cleaned$onset),
+                ncol=4)
+```
+
+```{r}
+# create CV splits
+set.seed(1234)
+shuffled_indices <- sample(1:length(y_obs), length(y_obs))
+splits <- list(1:23, 24:46, 47:69, 70:92, 93:115,
+               116:137, 138:159, 160:181, 182:203, 204:226) # all either length 22 or 23
+```
+
+```{r}
+# run splits in loop and save models
+mse_vec <- c()
+for (i in 1:10) {
+  # run train/test model for given split
+  curr_split <- i
+  curr_train <- shuffled_indices[-splits[[curr_split]]]
+  curr_test <- shuffled_indices[splits[[curr_split]]]
+  
+  # generate training data
+  N_train <- length(curr_train)
+  X_train <- X_obs[curr_train,]
+  y_train <- y_obs[curr_train]
+  Z_train <- Z_obs[curr_train,]
+  
+  # generate test data
+  N_test <- length(curr_test)
+  X_test <- X_obs[curr_test,]
+  y_test <- y_obs[curr_test]
+  Z_test <- Z_obs[curr_test,]
+  
+  # fit model to training data
+  curr_fit <- kmbayes(y=y_train, Z=Z_train, X=X_train, iter=8000, varsel=TRUE)
+  
+  # predict test data y's
+  y_test_pred <- colMeans(SamplePred(curr_fit, Znew=Z_test, Xnew=X_test, sel=4001:8000))
+  pred_errors <- y_test_pred - y_test
+  
+  # calculate mse
+  curr_mse <- mean(pred_errors^2)
+  print(paste0("MSE for BKMR split ", i, ": ", curr_mse))
+  mse_vec <- c(mse_vec, curr_mse)
+  
+  # save model
+  saveRDS(curr_fit, paste0("BKMR_fitCV_split", curr_split))
+}
+print("MSE for each split for BKMR:")
+print(mse_vec)
+print("Overall MSE for BKMR:")
+print(mean(mse_vec))
+```
+
+```{r}
+y_pred_mean <- c()
+y_pred_lower <- c()
+y_pred_upper <- c()
+
+# compile all results together
+for (i in 1:10) {
+  # load model fit
+  curr_fit <- readRDS(paste0("BKMR_fitCV_split", i))
+
+  # get covariate info to calculate predictions
+  curr_split <- i
+  curr_test <- shuffled_indices[splits[[curr_split]]]
+  X_test <- X_obs[curr_test,]
+  Z_test <- Z_obs[curr_test,]
+  
+  # make predictions
+  y_preds_curr <- SamplePred(curr_fit, Znew=Z_test, Xnew=X_test, sel=4001:8000)
+  
+  # calculate mean and quantiles
+  y_pred_mean <- c(y_pred_mean, colMeans(y_preds_curr))
+  y_pred_lower <- c(y_pred_lower, colQuantiles(y_preds_curr, probs=c(0.025)))
+  y_pred_upper <- c(y_pred_upper, colQuantiles(y_preds_curr, probs=c(0.975)))
+}
+```
+
+```{r}
+# summarize overall mse
+mean((y_pred_mean - y_obs[shuffled_indices])^2)
+```
+
+
+# CorrQuadReg
+
+```{r}
+# set random seed
+set.seed(1234)
+```
+
+```{r}
+# import data
+data <- read_csv("data/Phthalate_Metabolites_and_Demographic_Covariates_Dataset.csv")
+
+# import followup metabolite data
+data_all_metabolites <- read_csv("data/StandardizedMetabolites572_share.csv")
+```
+
+```{r}
+# attach outcome of interest to dataset
+data$M73 <- data_all_metabolites$M73
+
+# remove patients with no observed exposure values
+data_cleaned <- data |>
+  filter(!if_all(c(10:42), ~ is.na(.)))
+
+# standardize all m73 values to state outlier value
+standardized_m73 <- (data_cleaned$M73 - mean(data_cleaned$M73)) / sd(data_cleaned$M73)
+min(standardized_m73)
+
+# remove extreme outlier
+data_cleaned <- data_cleaned |>
+  filter(M73 > -9)
+```
+
+```{r}
+############ impute missing values with mice #######
+
+# run function -- use other exposure values and the child's sex
+data_cleaned_mids <- mice(data = data_cleaned[,c(3, 10:42)], m=1, print=FALSE, seed=1234)
+data_cleaned_imputed <- complete(data_cleaned_mids)
+
+# overwrite the data_cleaned columns with missingness with the imputed version
+data_cleaned[,(10:42)] <- data_cleaned_imputed[,(2:34)]
+```
+
+```{r}
+# standardize all columns
+colmeans_exposures <- colMeans(data_cleaned[,10:43])
+for (i in 10:43) {
+  data_cleaned[,i] <- (data_cleaned[,i] - colmeans_exposures[i-9]) / sd(as.numeric(unlist(data_cleaned[,i])))
+}
+```
+
+```{r}
+# normalize the age and BMI columns as well
+data_cleaned$cd_age <- (data_cleaned$cd_age - mean(data_cleaned$cd_age)) / sd(data_cleaned$cd_age)
+data_cleaned$X_ZBFA <- (data_cleaned$X_ZBFA - mean(data_cleaned$X_ZBFA)) / sd(data_cleaned$X_ZBFA)
+```
+
+```{r}
+# compute y_obs and X_obs for model (X_obs are exposures)
+y_obs <- data_cleaned$M73
+X_obs <- matrix(nrow=nrow(data_cleaned), ncol=30)
+for (i in 1:nrow(data_cleaned)) {
+  X_obs[i,] <- unlist(data_cleaned[i,10:39])
+}
+```
+
+```{r}
+# create matrix of covariates Z_obs
+Z_obs <- matrix(c(data_cleaned$SEXO_H,
+                  data_cleaned$cd_age,
+                  data_cleaned$X_ZBFA,
+                  data_cleaned$onset),
+                ncol=4)
+```
+
+```{r}
+# create CV splits
+set.seed(1234)
+shuffled_indices <- sample(1:length(y_obs), length(y_obs))
+splits <- list(1:23, 24:46, 47:69, 70:92, 93:115,
+               116:137, 138:159, 160:181, 182:203, 204:226) # all either length 22 or 23
+```
+
+```{r}
+mse_vec <- c()
+for (i in 1:10) {
+  # run train/test model for given split
+  curr_split <- i
+  curr_train <- shuffled_indices[-splits[[curr_split]]]
+  curr_test <- shuffled_indices[splits[[curr_split]]]
+  
+  # generate training data
+  N_train <- length(curr_train)
+  X_train <- X_obs[curr_train,]
+  y_train <- y_obs[curr_train]
+  Z_train <- Z_obs[curr_train,]
+  
+  # generate test data
+  N_test <- length(curr_test)
+  X_test <- X_obs[curr_test,]
+  y_test <- y_obs[curr_test]
+  Z_test <- Z_obs[curr_test,]
+  
+  # load stan model
+  mCV_CorrQuadReg <- stan_model("Stan/CorrQuadReg_AdditionalCovariates_CV.stan")
+  
+  # fit stan model
+  options(mc.cores = parallel::detectCores())
+  fitCV_CorrQuadReg <- sampling(mCV_CorrQuadReg,
+                     list(N_train=N_train,
+                          N_test=N_test,
+                          p=10,
+                          TT=3,
+                          r=4,
+                          y_train=y_train,
+                          Z_train=Z_train,
+                          X_train=X_train,
+                          X_test=X_test,
+                          y_test=y_test,
+                          Z_test=Z_test),
+                     seed=1234)
+  
+  # save model
+  saveRDS(fitCV_CorrQuadReg, paste0("CorrQuadReg_fitCV_split", curr_split))
+  
+  # extract samples and print mse
+  post_samples <- rstan::extract(fitCV_CorrQuadReg)
+  curr_y_pred <- colMeans(post_samples$y_test_pred)
+  pred_errors <- curr_y_pred - y_test
+  curr_mse <- mean(pred_errors^2)
+  print(paste0("MSE for CorrQuadReg split ", i, ": ", curr_mse))
+  mse_vec <- c(mse_vec, curr_mse)
+}
+print("MSE for each split for CorrQuadReg:")
+print(mse_vec)
+print("Overall MSE for CorrQuadReg:")
+print(mean(mse_vec))
+```
+
+```{r}
+y_pred_mean <- c()
+y_pred_lower <- c()
+y_pred_upper <- c()
+
+# compile all results together
+for (i in 1:10) {
+  curr_fit <- readRDS(paste0("CV_models/CorrQuadReg_fitCV_split", i))
+  curr_samples <- rstan::extract(curr_fit)
+  y_pred_mean <- c(y_pred_mean, colMeans(curr_samples$y_test_pred))
+  y_pred_lower <- c(y_pred_lower, colQuantiles(curr_samples$y_test_pred, probs=c(0.025)))
+  y_pred_upper <- c(y_pred_upper, colQuantiles(curr_samples$y_test_pred, probs=c(0.975)))
+}
+```
+
+```{r}
+# summarize overall mse
+mean((y_pred_mean - y_obs[shuffled_indices])^2)
+```
+

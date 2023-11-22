@@ -21,8 +21,11 @@ library(viridis)
 
 ELEMENT analysis using LowFR.
 
-The primary analysis begins on line 26. The posterior predictive checks and cross-validation
-begin on line 1100. The sex interaction analysis begins on line XXXX.
+The primary analysis begins on line 26. The posterior predictive checks
+begin on line 1103. The sex interaction analysis begins on line 1206.
+
+Note -- the data imported below can be downloaded from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p. Any use of this
+data should cite the dataset as indicated in the link.
 
 ## Primary analysis
 
@@ -327,7 +330,7 @@ for (i in 1:nrow(X)) {
 ```{r}
 # load model
 model_final <-
-  stan_model("stan/LowFR_ELEMENT.stan")
+  stan_model("Stan/LowFR_ELEMENT.stan")
 ```
 
 ```{r}
@@ -1104,20 +1107,837 @@ Note: Run lines 29-325 first to import and preprocess data.
 ```{r}
 # load model
 model_final <-
-  stan_model("stan/LowFR_ELEMENT_ppcheck.stan")
+  stan_model("Stan/LowFR_ELEMENT_ppcheck.stan")
+```
+
+```{r}
+# fit model
+options(mc.cores = parallel::detectCores())
+fit_realdata_M73 <- sampling(model_final, list(N=N_total,
+                                               N_mis1=N_mis1,
+                                               N_mis2=N_mis2,
+                                               N_mis3=N_mis3,
+                                               N_mis12=N_mis12,
+                                               N_mis13=N_mis13,
+                                               N_complete=N_complete,
+                                               t1_ind=t1_ind,
+                                               t2_ind=t2_ind,
+                                               t3_ind=t3_ind,
+                                                                p=p,
+                                                                k=k,
+                                                                TT=TT,
+                                                                X_partial=X_replace_nas,
+                                                                y=y,
+                                                                sex=sex,
+                                                                age=age,
+                                                                bmi=bmi,
+                                                                onset=onset),
+                                      chains=4,
+                                      iter=2000,
+                                      seed=1234,
+                             init_r = 1)
+
+
+```
+
+```{r}
+# extract samples
+post_samples_realdata_M73 <- extract(fit_realdata_M73)
+```
+
+```{r}
+# posterior predictive checks
+ppc_dens_overlay(y=y, yrep=post_samples_realdata_M73$y_rep) +
+  ylim(0,1) +
+  xlim(-5.5, 5.5) +
+  labs(title="LowFR posterior predictive density of 2-DG") +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=13))
+```
+
+```{r}
+ppc_stat(y, post_samples_realdata_M73$y_rep, stat = "mean") +
+  labs(title="LowFR")
+ppc_stat(y, post_samples_realdata_M73$y_rep, stat = "sd")
+```
+
+```{r}
+quantile5 <- function(x) {
+  return(quantile(x, probs=c(0.05)))
+}
+
+quantile95 <- function(x) {
+  return(quantile(x, probs=c(0.95)))
+}
+
+ppc_stat(y, post_samples_realdata_M73$y_rep, stat = "median")
+ppc_stat(y, post_samples_realdata_M73$y_rep, stat = "quantile5")
+ppc_stat(y, post_samples_realdata_M73$y_rep, stat = "quantile95")
+```
+
+```{r}
+# patient specific posterior predictive checks
+y_rep_means_LowFR <- colMeans(post_samples_realdata_M73$y_rep)
+y_rep_upper_LowFR <- rep(NA, length(y))
+y_rep_lower_LowFR <- rep(NA, length(y))
+for (i in 1:length(y)) {
+  y_rep_lower_LowFR[i] <- quantile(post_samples_realdata_M73$y_rep[,i], probs=c(0.025))
+  y_rep_upper_LowFR[i] <- quantile(post_samples_realdata_M73$y_rep[,i], probs=c(0.975))
+}
+
+LowFR_pp_df <- data.frame(y, y_rep_means_LowFR, y_rep_upper_LowFR, y_rep_lower_LowFR)
+names(LowFR_pp_df) <- c("observed_y", "y_rep_mean", "upper", "lower")
+
+ggplot(data=LowFR_pp_df, aes(x=observed_y, y=y_rep_mean)) +
+  geom_errorbar(aes(ymin=lower, ymax=upper)) +
+  geom_point(color="red") +
+  geom_abline(slope=1, intercept=0) +
+  ylim(-5.5,4) +
+  labs(title="LowFR -- posterior predictive 2-DG",
+       y="Posterior predictive 2-DG",
+       x="Observed 2-DG") +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=13))
 ```
 
 
+# Sex interaction model
+
+Note: Run lines 29-325 first to import and preprocess data.
+
+```{r}
+# load model
+model_final <-
+  stan_model("Stan/LowFR_ELEMENT_sexinteractions.stan")
+```
+
+```{r}
+# fit model
+options(mc.cores = parallel::detectCores())
+fit_realdata_M73 <- sampling(model_final, list(N=N_total,
+                                               N_mis1=N_mis1,
+                                               N_mis2=N_mis2,
+                                               N_mis3=N_mis3,
+                                               N_mis12=N_mis12,
+                                               N_mis13=N_mis13,
+                                               N_complete=N_complete,
+                                               t1_ind=t1_ind,
+                                               t2_ind=t2_ind,
+                                               t3_ind=t3_ind,
+                                                                p=p,
+                                                                k=k,
+                                                                TT=TT,
+                                                                X_partial=X_replace_nas,
+                                                                y=y,
+                                                                sex=sex,
+                                                                age=age,
+                                                                bmi=bmi,
+                                                                onset=onset),
+                                      chains=4,
+                                      iter=2000,
+                                      seed=1234,
+                             init_r = 1)
 
 
+```
+
+```{r}
+# extract samples
+post_samples_realdata_M73 <- extract(fit_realdata_M73)
+```
+
+```{r}
+# quantiles of covariate coefficients
+quantile(post_samples_realdata_M73$alpha_sex, probs=c(0.025, 0.5, 0.975))
+quantile(post_samples_realdata_M73$alpha_age, probs=c(0.025, 0.5, 0.975))
+quantile(post_samples_realdata_M73$alpha_bmi, probs=c(0.025, 0.5, 0.975))
+quantile(post_samples_realdata_M73$alpha_onset, probs=c(0.025, 0.5, 0.975))
+
+mean(post_samples_realdata_M73$alpha_sex)
+mean(post_samples_realdata_M73$alpha_age)
+mean(post_samples_realdata_M73$alpha_bmi)
+mean(post_samples_realdata_M73$alpha_onset)
+```
+
+```{r}
+####### Compute posterior of all the induced quadratic regression terms for y|x ########
+
+# initialize storage
+regression_intercept_samples <- rep(NA, length(post_samples_realdata_M73$tau[,1]))
+regression_maineffects_samples_boys <- matrix(nrow=length(post_samples_realdata_M73$tau[,1]), ncol=p*TT)
+regression_maineffects_samples_girls <- matrix(nrow=length(post_samples_realdata_M73$tau[,1]), ncol=p*TT)
+regression_interactions_samples <- array(dim =
+                                           c(length(post_samples_realdata_M73$tau[,1]),p*TT,p*TT))
+regression_sex_interaction_samples <- matrix(nrow=length(post_samples_realdata_M73$tau[,1]), ncol=p*TT)
+
+# loop over posterior samples and calculate intercept, main effects, and interactions
+for (i in 1:length(post_samples_realdata_M73$tau[,1])) {
+  # extract current samples of needed posterior quantities
+  curr_Sigma <- diag(post_samples_realdata_M73$Sigma[i,])
+  curr_Phi_mat <- post_samples_realdata_M73$Phi_mat[i,,]
+  curr_Lambda <- post_samples_realdata_M73$Lambda[i,,]
+  curr_theta <- post_samples_realdata_M73$theta[i,]
+  curr_theta_sex <- post_samples_realdata_M73$theta_sex[i,]
+  curr_Omega <- post_samples_realdata_M73$Omega[i,,]
+  curr_mu <- post_samples_realdata_M73$mu[i]
+  
+  # reshape A to be symmetric (not sure if this is necessary??)
+  curr_Omega <- (t(curr_Omega) + curr_Omega) / 2
+  
+  # calculate intermediate quantities
+  V_regression_curr <- kronecker(solve(t(curr_Lambda) %*% solve(curr_Sigma) %*% curr_Lambda + diag(k)), curr_Phi_mat)
+  A_regression_curr <- V_regression_curr %*% kronecker(t(curr_Lambda) %*% solve(curr_Sigma), solve(curr_Phi_mat))
+  
+  # store coefficients
+  regression_intercept_samples[i] <- tr(curr_Omega %*% V_regression_curr) + curr_mu
+  regression_maineffects_samples_boys[i,] <- as.vector(t(curr_theta) %*% A_regression_curr)
+  regression_maineffects_samples_girls[i,] <- as.vector(t(curr_theta + curr_theta_sex) %*% A_regression_curr)
+  regression_sex_interaction_samples[i,] <- as.vector(t(curr_theta_sex) %*% A_regression_curr)
+  regression_interactions_samples[i,,] <- t(A_regression_curr) %*% curr_Omega %*% A_regression_curr
+}
+```
+
+```{r}
+# calculate Rhat, ess_bulk, ess_tail for regression coefficients
+
+# intercept
+intercept_mat <- matrix(nrow=1000, ncol=4)
+for (i in 1:4) {
+  intercept_mat[,i] <- regression_intercept_samples[((i-1)*1000 + 1):(i*1000)]
+}
+intercept_Rhat <- Rhat(intercept_mat)
+intercept_ess_bulk <- ess_bulk(intercept_mat)
+intercept_ess_tail <- ess_tail(intercept_mat)
+
+# main effects
+main_effect_Rhat <- rep(NA, p*TT)
+main_effect_ess_bulk <- rep(NA, p*TT)
+main_effect_ess_tail <- rep(NA, p*TT)
+curr_mat <- matrix(nrow=1000, ncol=4)
+for (j in 1:(p*TT)) {
+  for (i in 1:4) {
+    curr_mat[,i] <- regression_maineffects_samples_girls[((i-1)*1000 + 1):(i*1000), j]
+  }
+  main_effect_Rhat[j] <- Rhat(curr_mat)
+  main_effect_ess_bulk[j] <- ess_bulk(curr_mat)
+  main_effect_ess_tail[j] <- ess_tail(curr_mat)
+}
+
+# interactions
+interaction_Rhat <- matrix(nrow=p*TT, ncol=p*TT)
+interaction_ess_bulk <- matrix(nrow=p*TT, ncol=p*TT)
+interaction_ess_tail <- matrix(nrow=p*TT, ncol=p*TT)
+for (j in 1:(p*TT)) {
+  for (k in j:(p*TT)) {
+    if (j == k) {
+      for (i in 1:4) {
+        curr_mat[,i] <- regression_interactions_samples[((i-1)*1000 + 1):(i*1000),j,k]
+      }
+    }
+    else {
+      for (i in 1:4) {
+        curr_mat[,i] <- regression_interactions_samples[((i-1)*1000 + 1):(i*1000),j,k] +
+          regression_interactions_samples[((i-1)*1000 + 1):(i*1000),k,j]
+      }
+    }
+    interaction_Rhat[j,k] <- Rhat(curr_mat)
+    interaction_ess_bulk[j,k] <- ess_bulk(curr_mat)
+    interaction_ess_tail[j,k] <- ess_tail(curr_mat)
+  }
+}
+
+```
+
+```{r}
+# summarize min and max values of each quantity
+
+# Rhat
+print("Rhat:")
+intercept_Rhat
+max(main_effect_Rhat)
+max(interaction_Rhat, na.rm = TRUE)
+min(main_effect_Rhat)
+min(interaction_Rhat, na.rm = TRUE)
+
+# ess_bulk
+print("ess_bulk:")
+intercept_ess_bulk
+max(main_effect_ess_bulk)
+max(interaction_ess_bulk, na.rm = TRUE)
+min(main_effect_ess_bulk)
+min(interaction_ess_bulk, na.rm = TRUE)
+
+# ess_tail
+print("ess_tail:")
+intercept_ess_tail
+max(main_effect_ess_tail)
+max(interaction_ess_tail, na.rm = TRUE)
+min(main_effect_ess_tail)
+min(interaction_ess_tail, na.rm = TRUE)
+```
+
+Summarize main effects -- boys.
+
+```{r}
+# 95% intervals and true values for main effects
+main_effect_lower <- c()
+main_effect_upper <- c()
+main_effect_mean <- c()
+
+# intercept
+main_effect_lower <- c(main_effect_lower, quantile(regression_intercept_samples, probs=c(0.025)))
+main_effect_upper <- c(main_effect_upper, quantile(regression_intercept_samples, probs=c(0.975)))
+main_effect_mean <- c(main_effect_mean, mean(regression_intercept_samples))
+
+# main effects
+for (i in 1:(p*TT)) {
+  main_effect_lower <- c(main_effect_lower, quantile(regression_maineffects_samples_boys[,i], probs=c(0.025)))
+  main_effect_upper <- c(main_effect_upper, quantile(regression_maineffects_samples_boys[,i], probs=c(0.975)))
+  main_effect_mean <- c(main_effect_mean, mean(regression_maineffects_samples_boys[,i]))
+}
+```
 
 
+```{r}
+########## posterior interval plot for main effects ###########
+
+# create df
+labels <- c("intercept", "BPA_T1", "BPA_T2", "BPA_T3",
+            "MBP_T1", "MBP_T2", "MBP_T3",
+            "MBzP_T1", "MBzP_T2", "MBzP_T3",
+            "MCPP_T1", "MCPP_T2", "MCPP_T3",
+            "MECPP_T1", "MECPP_T2", "MECPP_T3",
+            "MEHHP_T1", "MEHHP_T2", "MEHHP_T3",
+            "MEHP_T1", "MEHP_T2", "MEHP_T3",
+            "MEOHP_T1", "MEOHP_T2", "MEOHP_T3",
+            "MEP_T1", "MEP_T2", "MEP_T3",
+            "MIBP_T1", "MIBP_T2", "MIBP_T3")
+main_effect_interval_df <- data.frame(labels[2:31], main_effect_lower[2:31], main_effect_upper[2:31], main_effect_mean[2:31])
+names(main_effect_interval_df) <- c("labels", "main_effect_lower", "main_effect_upper", "main_effect_mean")
+main_effect_interval_df$labels <- factor(main_effect_interval_df$labels,
+                                         levels=rev(main_effect_interval_df$labels))
+
+# make plot
+main_plot <- ggplot(data=main_effect_interval_df, aes(x=labels, y=main_effect_mean)) +
+  geom_errorbar(aes(ymin=main_effect_lower, ymax=main_effect_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Main effects (male)",
+       y="", x="") +
+  ylim(-0.4,0.3) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+main_plot
+```
+
+Summarize main effects --  girls.
+
+```{r}
+# 95% intervals and true values for main effects
+main_effect_lower <- c()
+main_effect_upper <- c()
+main_effect_mean <- c()
+
+# intercept
+main_effect_lower <- c(main_effect_lower, quantile(regression_intercept_samples, probs=c(0.025)))
+main_effect_upper <- c(main_effect_upper, quantile(regression_intercept_samples, probs=c(0.975)))
+main_effect_mean <- c(main_effect_mean, mean(regression_intercept_samples))
+
+# main effects
+for (i in 1:(p*TT)) {
+  main_effect_lower <- c(main_effect_lower, quantile(regression_maineffects_samples_girls[,i], probs=c(0.025)))
+  main_effect_upper <- c(main_effect_upper, quantile(regression_maineffects_samples_girls[,i], probs=c(0.975)))
+  main_effect_mean <- c(main_effect_mean, mean(regression_maineffects_samples_girls[,i]))
+}
+```
 
 
+```{r}
+########## posterior interval plot for main effects ###########
+
+# create df
+labels <- c("intercept", "BPA_T1", "BPA_T2", "BPA_T3",
+            "MBP_T1", "MBP_T2", "MBP_T3",
+            "MBzP_T1", "MBzP_T2", "MBzP_T3",
+            "MCPP_T1", "MCPP_T2", "MCPP_T3",
+            "MECPP_T1", "MECPP_T2", "MECPP_T3",
+            "MEHHP_T1", "MEHHP_T2", "MEHHP_T3",
+            "MEHP_T1", "MEHP_T2", "MEHP_T3",
+            "MEOHP_T1", "MEOHP_T2", "MEOHP_T3",
+            "MEP_T1", "MEP_T2", "MEP_T3",
+            "MIBP_T1", "MIBP_T2", "MIBP_T3")
+main_effect_interval_df <- data.frame(labels[2:31], main_effect_lower[2:31], main_effect_upper[2:31], main_effect_mean[2:31])
+names(main_effect_interval_df) <- c("labels", "main_effect_lower", "main_effect_upper", "main_effect_mean")
+main_effect_interval_df$labels <- factor(main_effect_interval_df$labels,
+                                         levels=rev(main_effect_interval_df$labels))
+
+# make plot
+main_plot <- ggplot(data=main_effect_interval_df, aes(x=labels, y=main_effect_mean)) +
+  geom_errorbar(aes(ymin=main_effect_lower, ymax=main_effect_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Main effects (female)",
+       y="", x="") +
+  ylim(-0.4,0.3) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+main_plot
+```
+
+Summarize interaction effects with sex.
+
+```{r}
+# 95% intervals and true values for main effects
+main_effect_lower <- c()
+main_effect_upper <- c()
+main_effect_mean <- c()
+
+# intercept
+main_effect_lower <- c(main_effect_lower, quantile(regression_intercept_samples, probs=c(0.025)))
+main_effect_upper <- c(main_effect_upper, quantile(regression_intercept_samples, probs=c(0.975)))
+main_effect_mean <- c(main_effect_mean, mean(regression_intercept_samples))
+
+# main effects
+for (i in 1:(p*TT)) {
+  main_effect_lower <- c(main_effect_lower, quantile(regression_sex_interaction_samples[,i], probs=c(0.025)))
+  main_effect_upper <- c(main_effect_upper, quantile(regression_sex_interaction_samples[,i], probs=c(0.975)))
+  main_effect_mean <- c(main_effect_mean, mean(regression_sex_interaction_samples[,i]))
+}
+```
 
 
+```{r}
+########## posterior interval plot for main effects ###########
 
+# create df
+labels <- c("intercept", "BPA_T1", "BPA_T2", "BPA_T3",
+            "MBP_T1", "MBP_T2", "MBP_T3",
+            "MBzP_T1", "MBzP_T2", "MBzP_T3",
+            "MCPP_T1", "MCPP_T2", "MCPP_T3",
+            "MECPP_T1", "MECPP_T2", "MECPP_T3",
+            "MEHHP_T1", "MEHHP_T2", "MEHHP_T3",
+            "MEHP_T1", "MEHP_T2", "MEHP_T3",
+            "MEOHP_T1", "MEOHP_T2", "MEOHP_T3",
+            "MEP_T1", "MEP_T2", "MEP_T3",
+            "MIBP_T1", "MIBP_T2", "MIBP_T3")
+main_effect_interval_df <- data.frame(labels[2:31], main_effect_lower[2:31], main_effect_upper[2:31], main_effect_mean[2:31])
+names(main_effect_interval_df) <- c("labels", "main_effect_lower", "main_effect_upper", "main_effect_mean")
+main_effect_interval_df$labels <- factor(main_effect_interval_df$labels,
+                                         levels=rev(main_effect_interval_df$labels))
 
+# make plot
+main_plot <- ggplot(data=main_effect_interval_df, aes(x=labels, y=main_effect_mean)) +
+  geom_errorbar(aes(ymin=main_effect_lower, ymax=main_effect_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Interaction effects with female sex",
+       y="", x="") +
+  ylim(-0.4,0.3) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
 
+main_plot
+```
 
+Summarize parent compound effects -- boys.
+
+```{r}
+# Summarize posterior for groups of metabolites of given parent compounds
+# (i.e., the expected change in 2-DG when all metabolites of each parent compound
+#  go from -1 to 1 at all three trimesters.)
+
+# BPA
+BPA_post_boys <- (regression_maineffects_samples_boys[,1] +
+  regression_maineffects_samples_boys[,2] +
+  regression_maineffects_samples_boys[,3]) * 2
+
+# DBP -- MBP, MCPP
+DBP_post_boys <- (regression_maineffects_samples_boys[,4] +
+  regression_maineffects_samples_boys[,5] +
+  regression_maineffects_samples_boys[,6] +
+  regression_maineffects_samples_boys[,10] +
+  regression_maineffects_samples_boys[,11] +
+  regression_maineffects_samples_boys[,12]) * 2
+
+# DEP -- MEP
+DEP_post_boys <- (regression_maineffects_samples_boys[,25] +
+  regression_maineffects_samples_boys[,26] +
+  regression_maineffects_samples_boys[,27]) * 2
+
+# BBzP -- MBzP, MBP
+BBzP_post_boys <- (regression_maineffects_samples_boys[,7] +
+  regression_maineffects_samples_boys[,8] +
+  regression_maineffects_samples_boys[,9] +
+  regression_maineffects_samples_boys[,4] +
+  regression_maineffects_samples_boys[,5] +
+  regression_maineffects_samples_boys[,6]) * 2
+
+# DEHP -- MEHP, MEOHP, MEHHP, MECPP
+DEHP_post_boys <- (regression_maineffects_samples_boys[,13] +
+  regression_maineffects_samples_boys[,14] +
+  regression_maineffects_samples_boys[,15] +
+  regression_maineffects_samples_boys[,16] +
+  regression_maineffects_samples_boys[,17] +
+  regression_maineffects_samples_boys[,18] +
+  regression_maineffects_samples_boys[,19] +
+  regression_maineffects_samples_boys[,20] +
+  regression_maineffects_samples_boys[,21] +
+  regression_maineffects_samples_boys[,22] +
+  regression_maineffects_samples_boys[,23] +
+  regression_maineffects_samples_boys[,24]) * 2
+
+# DnOP -- MCPP
+DnOP_post_boys <- (regression_maineffects_samples_boys[,10] +
+  regression_maineffects_samples_boys[,11] +
+  regression_maineffects_samples_boys[,12]) * 2
+
+# DIBP -- MIBP
+DIBP_post_boys <- (regression_maineffects_samples_boys[,28] +
+  regression_maineffects_samples_boys[,29] +
+  regression_maineffects_samples_boys[,30]) * 2
+
+# all -- all 30 compounds
+all_post_boys <- (regression_maineffects_samples_boys[,1] +
+  regression_maineffects_samples_boys[,2] +
+  regression_maineffects_samples_boys[,3] +
+  regression_maineffects_samples_boys[,4] +
+  regression_maineffects_samples_boys[,5] +
+  regression_maineffects_samples_boys[,6] +
+  regression_maineffects_samples_boys[,7] +
+  regression_maineffects_samples_boys[,8] +
+  regression_maineffects_samples_boys[,9] +
+  regression_maineffects_samples_boys[,10] +
+  regression_maineffects_samples_boys[,11] +
+  regression_maineffects_samples_boys[,12] +
+  regression_maineffects_samples_boys[,13] +
+  regression_maineffects_samples_boys[,14] +
+  regression_maineffects_samples_boys[,15] +
+  regression_maineffects_samples_boys[,16] +
+  regression_maineffects_samples_boys[,17] +
+  regression_maineffects_samples_boys[,18] +
+  regression_maineffects_samples_boys[,19] +
+  regression_maineffects_samples_boys[,20] +
+  regression_maineffects_samples_boys[,21] +
+  regression_maineffects_samples_boys[,22] +
+  regression_maineffects_samples_boys[,23] +
+  regression_maineffects_samples_boys[,24] +
+  regression_maineffects_samples_boys[,25] +
+  regression_maineffects_samples_boys[,26] +
+  regression_maineffects_samples_boys[,27] +
+  regression_maineffects_samples_boys[,28] +
+  regression_maineffects_samples_boys[,29] +
+  regression_maineffects_samples_boys[,30]) * 2
+
+```
+
+```{r}
+# get means and 95% intervals for parent compound effects
+parent_lower <- c(quantile(BPA_post_boys, probs=c(0.025)),
+                  quantile(DBP_post_boys, probs=c(0.025)),
+                  quantile(DEP_post_boys, probs=c(0.025)),
+                  quantile(BBzP_post_boys, probs=c(0.025)),
+                  quantile(DEHP_post_boys, probs=c(0.025)),
+                  quantile(DnOP_post_boys, probs=c(0.025)),
+                  quantile(DIBP_post_boys, probs=c(0.025)),
+                  quantile(all_post_boys, probs=c(0.025)))
+parent_upper <- c(quantile(BPA_post_boys, probs=c(0.975)),
+                  quantile(DBP_post_boys, probs=c(0.975)),
+                  quantile(DEP_post_boys, probs=c(0.975)),
+                  quantile(BBzP_post_boys, probs=c(0.975)),
+                  quantile(DEHP_post_boys, probs=c(0.975)),
+                  quantile(DnOP_post_boys, probs=c(0.975)),
+                  quantile(DIBP_post_boys, probs=c(0.975)),
+                  quantile(all_post_boys, probs=c(0.975)))
+parent_mean <- c(mean(BPA_post_boys),
+                 mean(DBP_post_boys),
+                 mean(DEP_post_boys),
+                 mean(BBzP_post_boys),
+                 mean(DEHP_post_boys),
+                 mean(DnOP_post_boys),
+                 mean(DIBP_post_boys),
+                 mean(all_post_boys))
+#parent_labels <- c("DBP (MBP, MCPP)", "DEP (MEP)", "BBzP (MBzP, MBP)",
+#                   "DEHP (MEHP, MEOHP, MEHHP, MECPP)", "DnOP (MCPP)", "DIBP (MIBP)")
+parent_labels <- c("BPA", "DBP", "DEP", "BBzP",
+                   "DEHP", "DnOP", "DIBP", "All")
+
+# make dataframe with the above
+parent_df <- data.frame(parent_labels,
+                        parent_lower,
+                        parent_upper,
+                        parent_mean)
+
+names(parent_df) <- c("labels", "parent_lower", "parent_upper", "parent_mean")
+
+# order the phthalates
+parent_df <- parent_df |>
+  mutate(labels = fct_relevel(labels, "All", "DIBP", "DnOP", "DEHP",
+                              "BBzP", "DEP", "DBP", "BPA"))
+
+# make plot
+parent_plot <- ggplot(data=parent_df, aes(x=labels, y=parent_mean)) +
+  geom_errorbar(aes(ymin=parent_lower, ymax=parent_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Parent compound effects (male)",
+       y="", x="") +
+  ylim(-1.4, 1.2) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+parent_plot
+```
+
+Summarize parent compound effects -- girls.
+
+```{r}
+# Summarize posterior for groups of metabolites of given parent compounds
+# (i.e., the expected change in 2-DG when all metabolites of each parent compound
+#  go from -1 to 1 at all three trimesters.)
+
+# BPA
+BPA_post_girls <- (regression_maineffects_samples_girls[,1] +
+  regression_maineffects_samples_girls[,2] +
+  regression_maineffects_samples_girls[,3]) * 2
+
+# DBP -- MBP, MCPP
+DBP_post_girls <- (regression_maineffects_samples_girls[,4] +
+  regression_maineffects_samples_girls[,5] +
+  regression_maineffects_samples_girls[,6] +
+  regression_maineffects_samples_girls[,10] +
+  regression_maineffects_samples_girls[,11] +
+  regression_maineffects_samples_girls[,12]) * 2
+
+# DEP -- MEP
+DEP_post_girls <- (regression_maineffects_samples_girls[,25] +
+  regression_maineffects_samples_girls[,26] +
+  regression_maineffects_samples_girls[,27]) * 2
+
+# BBzP -- MBzP, MBP
+BBzP_post_girls <- (regression_maineffects_samples_girls[,7] +
+  regression_maineffects_samples_girls[,8] +
+  regression_maineffects_samples_girls[,9] +
+  regression_maineffects_samples_girls[,4] +
+  regression_maineffects_samples_girls[,5] +
+  regression_maineffects_samples_girls[,6]) * 2
+
+# DEHP -- MEHP, MEOHP, MEHHP, MECPP
+DEHP_post_girls <- (regression_maineffects_samples_girls[,13] +
+  regression_maineffects_samples_girls[,14] +
+  regression_maineffects_samples_girls[,15] +
+  regression_maineffects_samples_girls[,16] +
+  regression_maineffects_samples_girls[,17] +
+  regression_maineffects_samples_girls[,18] +
+  regression_maineffects_samples_girls[,19] +
+  regression_maineffects_samples_girls[,20] +
+  regression_maineffects_samples_girls[,21] +
+  regression_maineffects_samples_girls[,22] +
+  regression_maineffects_samples_girls[,23] +
+  regression_maineffects_samples_girls[,24]) * 2
+
+# DnOP -- MCPP
+DnOP_post_girls <- (regression_maineffects_samples_girls[,10] +
+  regression_maineffects_samples_girls[,11] +
+  regression_maineffects_samples_girls[,12]) * 2
+
+# DIBP -- MIBP
+DIBP_post_girls <- (regression_maineffects_samples_girls[,28] +
+  regression_maineffects_samples_girls[,29] +
+  regression_maineffects_samples_girls[,30]) * 2
+
+# all -- all 30 compounds
+all_post_girls <- (regression_maineffects_samples_girls[,1] +
+  regression_maineffects_samples_girls[,2] +
+  regression_maineffects_samples_girls[,3] +
+  regression_maineffects_samples_girls[,4] +
+  regression_maineffects_samples_girls[,5] +
+  regression_maineffects_samples_girls[,6] +
+  regression_maineffects_samples_girls[,7] +
+  regression_maineffects_samples_girls[,8] +
+  regression_maineffects_samples_girls[,9] +
+  regression_maineffects_samples_girls[,10] +
+  regression_maineffects_samples_girls[,11] +
+  regression_maineffects_samples_girls[,12] +
+  regression_maineffects_samples_girls[,13] +
+  regression_maineffects_samples_girls[,14] +
+  regression_maineffects_samples_girls[,15] +
+  regression_maineffects_samples_girls[,16] +
+  regression_maineffects_samples_girls[,17] +
+  regression_maineffects_samples_girls[,18] +
+  regression_maineffects_samples_girls[,19] +
+  regression_maineffects_samples_girls[,20] +
+  regression_maineffects_samples_girls[,21] +
+  regression_maineffects_samples_girls[,22] +
+  regression_maineffects_samples_girls[,23] +
+  regression_maineffects_samples_girls[,24] +
+  regression_maineffects_samples_girls[,25] +
+  regression_maineffects_samples_girls[,26] +
+  regression_maineffects_samples_girls[,27] +
+  regression_maineffects_samples_girls[,28] +
+  regression_maineffects_samples_girls[,29] +
+  regression_maineffects_samples_girls[,30]) * 2
+
+```
+
+```{r}
+# get means and 95% intervals for parent compound effects
+parent_lower <- c(quantile(BPA_post_girls, probs=c(0.025)),
+                  quantile(DBP_post_girls, probs=c(0.025)),
+                  quantile(DEP_post_girls, probs=c(0.025)),
+                  quantile(BBzP_post_girls, probs=c(0.025)),
+                  quantile(DEHP_post_girls, probs=c(0.025)),
+                  quantile(DnOP_post_girls, probs=c(0.025)),
+                  quantile(DIBP_post_girls, probs=c(0.025)),
+                  quantile(all_post_girls, probs=c(0.025)))
+parent_upper <- c(quantile(BPA_post_girls, probs=c(0.975)),
+                  quantile(DBP_post_girls, probs=c(0.975)),
+                  quantile(DEP_post_girls, probs=c(0.975)),
+                  quantile(BBzP_post_girls, probs=c(0.975)),
+                  quantile(DEHP_post_girls, probs=c(0.975)),
+                  quantile(DnOP_post_girls, probs=c(0.975)),
+                  quantile(DIBP_post_girls, probs=c(0.975)),
+                  quantile(all_post_girls, probs=c(0.975)))
+parent_mean <- c(mean(BPA_post_girls),
+                 mean(DBP_post_girls),
+                 mean(DEP_post_girls),
+                 mean(BBzP_post_girls),
+                 mean(DEHP_post_girls),
+                 mean(DnOP_post_girls),
+                 mean(DIBP_post_girls),
+                 mean(all_post_girls))
+#parent_labels <- c("DBP (MBP, MCPP)", "DEP (MEP)", "BBzP (MBzP, MBP)",
+#                   "DEHP (MEHP, MEOHP, MEHHP, MECPP)", "DnOP (MCPP)", "DIBP (MIBP)")
+parent_labels <- c("BPA", "DBP", "DEP", "BBzP",
+                   "DEHP", "DnOP", "DIBP", "All")
+
+# make dataframe with the above
+parent_df <- data.frame(parent_labels,
+                        parent_lower,
+                        parent_upper,
+                        parent_mean)
+
+names(parent_df) <- c("labels", "parent_lower", "parent_upper", "parent_mean")
+
+# order the phthalates
+parent_df <- parent_df |>
+  mutate(labels = fct_relevel(labels, "All", "DIBP", "DnOP", "DEHP",
+                              "BBzP", "DEP", "DBP", "BPA"))
+
+# make plot
+parent_plot <- ggplot(data=parent_df, aes(x=labels, y=parent_mean)) +
+  geom_errorbar(aes(ymin=parent_lower, ymax=parent_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Parent compound effects (female)",
+       y="", x="") +
+  ylim(-1.4, 1.2) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+parent_plot
+```
+
+Summarize difference between girl and boy parent compound effects.
+
+```{r}
+## Difference between girl and boy parent compound effects
+
+# BPA
+BPA_post_diff <- BPA_post_girls - BPA_post_boys
+
+# DBP -- MBP, MCPP
+DBP_post_diff <- DBP_post_girls - DBP_post_boys
+
+# DEP -- MEP
+DEP_post_diff <- DEP_post_girls - DEP_post_boys
+
+# BBzP -- MBzP, MBP
+BBzP_post_diff <- BBzP_post_girls - BBzP_post_boys
+
+# DEHP -- MEHP, MEOHP, MEHHP, MECPP
+DEHP_post_diff <- DEHP_post_girls - DEHP_post_boys
+
+# DnOP -- MCPP
+DnOP_post_diff <- DnOP_post_girls - DnOP_post_boys
+
+# DIBP -- MIBP
+DIBP_post_diff <- DIBP_post_girls - DIBP_post_boys
+
+# all -- all 30 compounds
+all_post_diff <- all_post_girls - all_post_boys
+```
+
+```{r}
+# get means and 95% intervals for parent compound effects
+parent_lower <- c(quantile(BPA_post_diff, probs=c(0.025)),
+                  quantile(DBP_post_diff, probs=c(0.025)),
+                  quantile(DEP_post_diff, probs=c(0.025)),
+                  quantile(BBzP_post_diff, probs=c(0.025)),
+                  quantile(DEHP_post_diff, probs=c(0.025)),
+                  quantile(DnOP_post_diff, probs=c(0.025)),
+                  quantile(DIBP_post_diff, probs=c(0.025)),
+                  quantile(all_post_diff, probs=c(0.025)))
+parent_upper <- c(quantile(BPA_post_diff, probs=c(0.975)),
+                  quantile(DBP_post_diff, probs=c(0.975)),
+                  quantile(DEP_post_diff, probs=c(0.975)),
+                  quantile(BBzP_post_diff, probs=c(0.975)),
+                  quantile(DEHP_post_diff, probs=c(0.975)),
+                  quantile(DnOP_post_diff, probs=c(0.975)),
+                  quantile(DIBP_post_diff, probs=c(0.975)),
+                  quantile(all_post_diff, probs=c(0.975)))
+parent_mean <- c(mean(BPA_post_diff),
+                 mean(DBP_post_diff),
+                 mean(DEP_post_diff),
+                 mean(BBzP_post_diff),
+                 mean(DEHP_post_diff),
+                 mean(DnOP_post_diff),
+                 mean(DIBP_post_diff),
+                 mean(all_post_diff))
+#parent_labels <- c("DBP (MBP, MCPP)", "DEP (MEP)", "BBzP (MBzP, MBP)",
+#                   "DEHP (MEHP, MEOHP, MEHHP, MECPP)", "DnOP (MCPP)", "DIBP (MIBP)")
+parent_labels <- c("BPA", "DBP", "DEP", "BBzP",
+                   "DEHP", "DnOP", "DIBP", "All")
+
+# make dataframe with the above
+parent_df <- data.frame(parent_labels,
+                        parent_lower,
+                        parent_upper,
+                        parent_mean)
+
+names(parent_df) <- c("labels", "parent_lower", "parent_upper", "parent_mean")
+
+# order the phthalates
+parent_df <- parent_df |>
+  mutate(labels = fct_relevel(labels, "All", "DIBP", "DnOP", "DEHP",
+                              "BBzP", "DEP", "DBP", "BPA"))
+
+# make plot
+parent_plot <- ggplot(data=parent_df, aes(x=labels, y=parent_mean)) +
+  geom_errorbar(aes(ymin=parent_lower, ymax=parent_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  labs(title="Parent compound effect differences (female - male)",
+       y="", x="") +
+  ylim(-1.4, 1.4) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+parent_plot
+```
 

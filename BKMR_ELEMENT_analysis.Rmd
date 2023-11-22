@@ -1,0 +1,339 @@
+---
+title: "BKMR ELEMENT analysis"
+output: html_document
+date: "2023-11-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(mvtnorm)
+library(rstan)
+library(shinystan)
+library(psych)
+library(mice)
+library(ggcorrplot)
+library(cowplot)
+library(viridis)
+library(bkmr)
+```
+
+## Description
+
+ELEMENT analysis using BKMR.
+
+The primary analysis begins on line 30. The posterior predictive checks
+begin on line 276.
+
+Note -- the data imported below can be downloaded from https://deepblue.lib.umich.edu/data/concern/data_sets/k3569479p. Any use of this
+data should cite the dataset as indicated in the link.
+
+## Primary analysis
+
+```{r}
+# set random seed
+set.seed(1234)
+```
+
+```{r}
+# import data
+data <- read_csv("data/Phthalate_Metabolites_and_Demographic_Covariates_Dataset.csv")
+
+# import followup metabolite data
+data_all_metabolites <- read_csv("data/StandardizedMetabolites572_share.csv")
+```
+
+```{r}
+# attach outcome of interest to dataset
+data$M73 <- data_all_metabolites$M73
+
+# remove patients with no observed exposure values
+data_cleaned <- data |>
+  filter(!if_all(c(10:42), ~ is.na(.)))
+
+# standardize all m73 values to state outlier value
+standardized_m73 <- (data_cleaned$M73 - mean(data_cleaned$M73)) / sd(data_cleaned$M73)
+min(standardized_m73)
+
+# remove extreme outlier
+data_cleaned <- data_cleaned |>
+  filter(M73 > -9)
+```
+
+```{r}
+############ impute missing values with mice #######
+
+# run function -- use other exposure values and the child's sex
+data_cleaned_mids <- mice(data = data_cleaned[,c(3, 10:42)], m=1, print=FALSE, seed=1234)
+data_cleaned_imputed <- complete(data_cleaned_mids)
+
+# overwrite the data_cleaned columns with missingness with the imputed version
+data_cleaned[,(10:42)] <- data_cleaned_imputed[,(2:34)]
+```
+
+```{r}
+# standardize all columns
+colmeans_exposures <- colMeans(data_cleaned[,10:43])
+for (i in 10:43) {
+  data_cleaned[,i] <- (data_cleaned[,i] - colmeans_exposures[i-9]) / sd(as.numeric(unlist(data_cleaned[,i])))
+}
+```
+
+```{r}
+# normalize the age and BMI columns as well
+data_cleaned$cd_age <- (data_cleaned$cd_age - mean(data_cleaned$cd_age)) / sd(data_cleaned$cd_age)
+data_cleaned$X_ZBFA <- (data_cleaned$X_ZBFA - mean(data_cleaned$X_ZBFA)) / sd(data_cleaned$X_ZBFA)
+```
+
+```{r}
+# compute y_obs and Z_obs for model (Z_obs are exposures)
+y_obs <- data_cleaned$M73
+Z_obs <- matrix(nrow=nrow(data_cleaned), ncol=30)
+for (i in 1:nrow(data_cleaned)) {
+  Z_obs[i,] <- unlist(data_cleaned[i,10:39])
+}
+```
+
+```{r}
+# create matrix of covariates X_obs
+X_obs <- matrix(c(data_cleaned$SEXO_H,
+                  data_cleaned$cd_age,
+                  data_cleaned$X_ZBFA,
+                  data_cleaned$onset),
+                ncol=4)
+```
+
+```{r}
+# fit BKMR model
+m1 <- kmbayes(y=y_obs, Z=Z_obs, X=X_obs, iter=8000, varsel=TRUE)
+```
+
+```{r}
+# extract beta_samples
+beta_samples <- m1$beta[4001:8000,]
+
+# summarize covariates
+print("Sex:")
+quantile(beta_samples[,1], probs=c(0.025, 0.975))
+mean(beta_samples[,1])
+print("Age:")
+quantile(beta_samples[,2], probs=c(0.025, 0.975))
+mean(beta_samples[,2])
+print("BMI:")
+quantile(beta_samples[,3], probs=c(0.025, 0.975))
+mean(beta_samples[,3])
+print("Puberty Onset:")
+quantile(beta_samples[,4], probs=c(0.025, 0.975))
+mean(beta_samples[,4])
+```
+
+```{r}
+# calculate contrasts
+Znew <- rbind(diag(30), -1*diag(30))
+Znew <- Znew * 0.5
+contrast_samples <- SamplePred(fit=m1, Znew=Znew, Xnew=matrix(rep(0,nrow(Znew)*4), ncol=4),
+                               sel=4001:8000)
+
+# add columns 61-90 for actual contrasts
+for (i in 1:30) {
+  curr_diff <- contrast_samples[,i] - contrast_samples[,(i + 30)]
+  contrast_samples <- cbind(contrast_samples, curr_diff)
+}
+```
+
+```{r}
+# organize upper/lower quantiles, means, and true values of contrasts
+diffs_lower <- c()
+diffs_upper <- c()
+diffs_mean <- c()
+
+for (i in 1:30) {
+  diffs_lower <- c(diffs_lower, quantile(contrast_samples[,(60+i)], probs=0.025))
+  diffs_upper <- c(diffs_upper, quantile(contrast_samples[,(60+i)], probs=0.975))
+  diffs_mean <- c(diffs_mean, mean(contrast_samples[,(60+i)]))
+}
+```
+
+```{r}
+########## posterior interval plot for main effects ###########
+
+# create df
+labels <- c("BPA_T1", "BPA_T2", "BPA_T3",
+            "MBP_T1", "MBP_T2", "MBP_T3",
+            "MBzP_T1", "MBzP_T2", "MBzP_T3",
+            "MCPP_T1", "MCPP_T2", "MCPP_T3",
+            "MECPP_T1", "MECPP_T2", "MECPP_T3",
+            "MEHHP_T1", "MEHHP_T2", "MEHHP_T3",
+            "MEHP_T1", "MEHP_T2", "MEHP_T3",
+            "MEOHP_T1", "MEOHP_T2", "MEOHP_T3",
+            "MEP_T1", "MEP_T2", "MEP_T3",
+            "MIBP_T1", "MIBP_T2", "MIBP_T3")
+diffs_df <- data.frame(labels, diffs_lower, diffs_upper, diffs_mean)
+diffs_df$labels <- factor(diffs_df$labels,
+                                         levels=rev(diffs_df$labels))
+
+# make plot
+main_plot <- ggplot(data=diffs_df, aes(x=labels, y=diffs_mean)) +
+  geom_errorbar(aes(ymin=diffs_lower, ymax=diffs_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  #labs(title="Expected change in y when given x_ij goes from -1 to 1 (naive BKMR)",
+  #     subtitle = "All other exposures fixed to 0. Red=true. Interval=95% posterior CI.",
+  labs(title="Main effects (BKMR)",
+       y="", x="") +
+  ylim(-1,1.5) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+main_plot
+```
+
+```{r}
+# get contrasts for parent compound plots
+yes <- c(1,1,1)
+no <- c(0,0,0)
+BPA <- c(yes, rep(no, 9))
+DBP <- c(no,yes,no,yes,rep(no,6))
+DEP <- c(rep(no,8), yes, no)
+BBzP <- c(no, yes,yes, rep(no,7))
+DEHP <- c(rep(no,4), rep(yes,4), rep(no,2))
+DnOP <- c(rep(no,3), yes, rep(no,6))
+DIBP <- c(rep(no,9), yes)
+all <- rep(yes,10)
+
+Znew_parent <- rbind(BPA,
+                     DBP,
+                     DEP,
+                     BBzP,
+                     DEHP,
+                     DnOP,
+                     DIBP,
+                     all)
+
+Znew_parent <- rbind(Znew_parent, -1*Znew_parent)
+```
+
+```{r}
+# calculate contrasts
+contrast_samples <- SamplePred(fit=m1, Znew=Znew_parent, Xnew=matrix(rep(0,nrow(Znew_parent)*4), ncol=4),
+                               sel=4001:8000)
+
+# add columns 61-90 for actual contrasts
+for (i in 1:(nrow(Znew_parent)/2)) {
+  curr_diff <- contrast_samples[,i] - contrast_samples[,(i + nrow(Znew_parent)/2)]
+  contrast_samples <- cbind(contrast_samples, curr_diff)
+}
+```
+
+```{r}
+# organize upper/lower quantiles, means, and true values of contrasts
+diffs_lower <- c()
+diffs_upper <- c()
+diffs_mean <- c()
+
+for (i in 1:8) {
+  diffs_lower <- c(diffs_lower, quantile(contrast_samples[,(16+i)], probs=0.025))
+  diffs_upper <- c(diffs_upper, quantile(contrast_samples[,(16+i)], probs=0.975))
+  diffs_mean <- c(diffs_mean, mean(contrast_samples[,(16+i)]))
+}
+```
+
+```{r}
+########## posterior interval plot for parent effects ###########
+
+# create df
+labels <- c("BPA",
+                     "DBP",
+                     "DEP",
+                     "BBzP",
+                     "DEHP",
+                     "DnOP",
+                     "DIBP",
+                     "All")
+diffs_df <- data.frame(labels, diffs_lower, diffs_upper, diffs_mean)
+diffs_df$labels <- factor(diffs_df$labels,
+                                         levels=rev(diffs_df$labels))
+
+# make plot
+parent_plot <- ggplot(data=diffs_df, aes(x=labels, y=diffs_mean)) +
+  geom_errorbar(aes(ymin=diffs_lower, ymax=diffs_upper)) +
+  geom_hline(yintercept=0, color="black") +
+  geom_point(color="red") +
+  coord_flip() +
+  #labs(title="Expected change in y when given x_ij goes from -1 to 1 (naive BKMR)",
+  #     subtitle = "All other exposures fixed to 0. Red=true. Interval=95% posterior CI.",
+  labs(title="Parent compound effects (BKMR)",
+       y="", x="") +
+  ylim(-3.6,2.3) +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=10))
+
+parent_plot
+```
+
+## Posterior predictive checks
+
+```{r}
+# posterior predictive checks
+h_obs <- SamplePred(m1, Znew=Z_obs, Xnew=X_obs, sel=4001:8000)
+```
+
+```{r}
+# generate posterior predictive matrix y_rep
+y_rep_BKMR <- matrix(nrow=4000, ncol=length(y_obs))
+
+for (i in 1:4000) {
+  for (j in 1:length(y_obs)) {
+    y_rep_BKMR[i,j] <- h_obs[i,j] + rnorm(n=1, mean=0, sd=sqrt(m1$sigsq.eps[i]))
+  }
+}
+```
+
+```{r}
+# posterior predictive checks
+# posterior predictives stored in post_samples$y_rep
+ppc_dens_overlay(y=y_obs, yrep=y_rep_BKMR) +
+  ylim(0,1) +
+  xlim(-5.5, 5.5) +
+  labs(title="BKMR posterior predictive density of 2-DG") +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=13))
+```
+
+```{r}
+ppc_stat(y, y_rep_BKMR, stat = "mean") +
+  labs(title="BKMR")
+ppc_stat(y, y_rep_BKMR, stat = "sd")
+```
+
+```{r}
+# patient-specific posterior predictive distributions
+y_rep_means_BKMR <- colMeans(y_rep_BKMR)
+y_rep_upper_BKMR <- rep(NA, length(y))
+y_rep_lower_BKMR <- rep(NA, length(y))
+for (i in 1:length(y)) {
+  y_rep_lower_BKMR[i] <- quantile(y_rep_BKMR[,i], probs=c(0.025))
+  y_rep_upper_BKMR[i] <- quantile(y_rep_BKMR[,i], probs=c(0.975))
+}
+
+BKMR_pp_df <- data.frame(y_obs, y_rep_means_BKMR, y_rep_upper_BKMR, y_rep_lower_BKMR)
+names(BKMR_pp_df) <- c("observed_y", "y_rep_mean", "upper", "lower")
+
+ggplot(data=BKMR_pp_df, aes(x=observed_y, y=y_rep_mean)) +
+  geom_errorbar(aes(ymin=lower, ymax=upper)) +
+  geom_point(color="red") +
+  geom_abline(slope=1, intercept=0) +
+  ylim(-5.5,4) +
+  labs(title="BKMR -- posterior predictive 2-DG",
+       x="Observed 2-DG",
+       y="Posterior predictive 2-DG") +
+  theme(plot.title = element_text(size=20),
+          axis.text.x = element_text(size=13),
+          axis.text.y = element_text(size=13))
+```
+
+
