@@ -1,6 +1,6 @@
 # LowFR
 
-This repository contains code that generates the results from the paper: G. Palmer, A.H. Herring, D.B. Dunson (2023+) 'Low-rank longitudinal factor regression', as well as an implementation of LowFR for use on other data sets.
+This repository contains code that generates the results from the paper: G. Palmer, A.H. Herring, D.B. Dunson (2023+) 'Low-rank longitudinal factor regression' (https://arxiv.org/abs/2311.16470), as well as an implementation of LowFR for use on other data sets.
 
 If you have any questions, find bugs, etc. please reach out to glenn.palmer@duke.edu.
 
